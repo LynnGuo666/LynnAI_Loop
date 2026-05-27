@@ -47,6 +47,12 @@ export const updateChannel = (id: number, data: Partial<Channel>) =>
   request<Channel>(`/api/channels/${id}`, { method: "PUT", body: JSON.stringify(data) });
 export const deleteChannel = (id: number) =>
   request<{ status: string }>(`/api/channels/${id}`, { method: "DELETE" });
+export const listChannelModels = (id: number) =>
+  request<{ data?: Array<{ id?: string }> }>(`/channel/${id}/v1/models`).then((r) =>
+    Array.isArray(r.data)
+      ? r.data.map((m) => m.id?.trim()).filter((id): id is string => Boolean(id))
+      : []
+  );
 
 // Keys
 export const listKeysByChannel = (channelId: number) =>

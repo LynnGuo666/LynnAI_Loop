@@ -18,5 +18,34 @@ func Open(dbPath string) (*sql.DB, error) {
 	if _, err := db.Exec(createTablesSQL); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
+	if err := ensureColumn(db, "channels", "probe_model", "ALTER TABLE channels ADD COLUMN probe_model TEXT NOT NULL DEFAULT ''"); err != nil {
+		return nil, fmt.Errorf("migrate channels.probe_model: %w", err)
+	}
 	return db, nil
+}
+
+func ensureColumn(db *sql.DB, table, column, ddl string) error {
+	rows, err := db.Query("PRAGMA table_info(" + table + ")")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid int
+		var name, dataType string
+		var notNull, pk int
+		var defaultValue interface{}
+		if err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultValue, &pk); err != nil {
+			return err
+		}
+		if name == column {
+			return rows.Err()
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	_, err = db.Exec(ddl)
+	return err
 }

@@ -17,8 +17,8 @@ func NewChannelRepo(db *sql.DB) *ChannelRepo {
 func (r *ChannelRepo) Create(ch *models.Channel) error {
 	now := time.Now()
 	result, err := r.db.Exec(
-		`INSERT INTO channels (name, base_url, description, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
-		ch.Name, ch.BaseURL, ch.Description, boolToInt(ch.IsActive), now, now,
+		`INSERT INTO channels (name, base_url, description, probe_model, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		ch.Name, ch.BaseURL, ch.Description, ch.ProbeModel, boolToInt(ch.IsActive), now, now,
 	)
 	if err != nil {
 		return err
@@ -33,8 +33,8 @@ func (r *ChannelRepo) GetByID(id int64) (*models.Channel, error) {
 	ch := &models.Channel{}
 	var isActive int
 	err := r.db.QueryRow(
-		`SELECT id, name, base_url, description, is_active, created_at, updated_at FROM channels WHERE id = ?`, id,
-	).Scan(&ch.ID, &ch.Name, &ch.BaseURL, &ch.Description, &isActive, &ch.CreatedAt, &ch.UpdatedAt)
+		`SELECT id, name, base_url, description, probe_model, is_active, created_at, updated_at FROM channels WHERE id = ?`, id,
+	).Scan(&ch.ID, &ch.Name, &ch.BaseURL, &ch.Description, &ch.ProbeModel, &isActive, &ch.CreatedAt, &ch.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +43,7 @@ func (r *ChannelRepo) GetByID(id int64) (*models.Channel, error) {
 }
 
 func (r *ChannelRepo) List() ([]models.Channel, error) {
-	rows, err := r.db.Query(`SELECT id, name, base_url, description, is_active, created_at, updated_at FROM channels ORDER BY id`)
+	rows, err := r.db.Query(`SELECT id, name, base_url, description, probe_model, is_active, created_at, updated_at FROM channels ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +53,7 @@ func (r *ChannelRepo) List() ([]models.Channel, error) {
 	for rows.Next() {
 		var ch models.Channel
 		var isActive int
-		if err := rows.Scan(&ch.ID, &ch.Name, &ch.BaseURL, &ch.Description, &isActive, &ch.CreatedAt, &ch.UpdatedAt); err != nil {
+		if err := rows.Scan(&ch.ID, &ch.Name, &ch.BaseURL, &ch.Description, &ch.ProbeModel, &isActive, &ch.CreatedAt, &ch.UpdatedAt); err != nil {
 			return nil, err
 		}
 		ch.IsActive = isActive == 1
@@ -64,8 +64,8 @@ func (r *ChannelRepo) List() ([]models.Channel, error) {
 
 func (r *ChannelRepo) Update(ch *models.Channel) error {
 	_, err := r.db.Exec(
-		`UPDATE channels SET name=?, base_url=?, description=?, is_active=?, updated_at=? WHERE id=?`,
-		ch.Name, ch.BaseURL, ch.Description, boolToInt(ch.IsActive), time.Now(), ch.ID,
+		`UPDATE channels SET name=?, base_url=?, description=?, probe_model=?, is_active=?, updated_at=? WHERE id=?`,
+		ch.Name, ch.BaseURL, ch.Description, ch.ProbeModel, boolToInt(ch.IsActive), time.Now(), ch.ID,
 	)
 	return err
 }

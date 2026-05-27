@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS channels (
     name TEXT NOT NULL UNIQUE,
     base_url TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
+    probe_model TEXT NOT NULL DEFAULT '',
     is_active INTEGER NOT NULL DEFAULT 1,
     created_at DATETIME NOT NULL DEFAULT (datetime('now')),
     updated_at DATETIME NOT NULL DEFAULT (datetime('now'))

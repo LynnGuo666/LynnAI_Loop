@@ -4,6 +4,7 @@ export interface Channel {
   name: string;
   base_url: string;
   description: string;
+  probe_model: string;
   is_active: boolean;
   created_at: string;
   updated_at: string;

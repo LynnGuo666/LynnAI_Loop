@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"loop/internal/models"
@@ -57,6 +58,10 @@ func (h *Handlers) CreateChannel(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "invalid request body")
 		return
 	}
+	ch.Name = strings.TrimSpace(ch.Name)
+	ch.BaseURL = strings.TrimSpace(ch.BaseURL)
+	ch.ProbeModel = strings.TrimSpace(ch.ProbeModel)
+	ch.IsActive = true
 	if ch.Name == "" || ch.BaseURL == "" {
 		writeError(w, 400, "name and base_url are required")
 		return
@@ -93,21 +98,32 @@ func (h *Handlers) UpdateChannel(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "channel not found")
 		return
 	}
-	var input models.Channel
+	var input struct {
+		Name        *string `json:"name"`
+		BaseURL     *string `json:"base_url"`
+		Description *string `json:"description"`
+		ProbeModel  *string `json:"probe_model"`
+		IsActive    *bool   `json:"is_active"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		writeError(w, 400, "invalid request body")
 		return
 	}
-	if input.Name != "" {
-		ch.Name = input.Name
+	if input.Name != nil {
+		ch.Name = strings.TrimSpace(*input.Name)
 	}
-	if input.BaseURL != "" {
-		ch.BaseURL = input.BaseURL
+	if input.BaseURL != nil {
+		ch.BaseURL = strings.TrimSpace(*input.BaseURL)
 	}
-	if input.Description != "" {
-		ch.Description = input.Description
+	if input.Description != nil {
+		ch.Description = *input.Description
 	}
-	ch.IsActive = input.IsActive
+	if input.ProbeModel != nil {
+		ch.ProbeModel = strings.TrimSpace(*input.ProbeModel)
+	}
+	if input.IsActive != nil {
+		ch.IsActive = *input.IsActive
+	}
 	if err := h.channelRepo.Update(ch); err != nil {
 		writeError(w, 500, "failed to update channel")
 		return

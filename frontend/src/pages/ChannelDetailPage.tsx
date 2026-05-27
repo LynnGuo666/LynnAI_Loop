@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { getChannel, listKeysByChannel, createKey, deleteKey, enableKey, probeKey, getUsageTimeseries } from "../api/client";
+import { getChannel, listKeysByChannel, createKey, deleteKey, enableKey, probeKey, getUsageTimeseries, updateChannel, listChannelModels } from "../api/client";
 import { StatCard, DataTable, ConfirmDialog } from "../components/common";
 import type { Channel, APIKey, TimeseriesPoint, KeyProbe } from "../types";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
@@ -14,6 +14,10 @@ export function ChannelDetailPage() {
   const [showAddKey, setShowAddKey] = useState(false);
   const [delKeyId, setDelKeyId] = useState<number | null>(null);
   const [probeResult, setProbeResult] = useState<KeyProbe | null>(null);
+  const [probeModel, setProbeModel] = useState("");
+  const [modelOptions, setModelOptions] = useState<string[]>([]);
+  const [modelLoading, setModelLoading] = useState(false);
+  const [modelMsg, setModelMsg] = useState("");
 
   const load = () => {
     getChannel(channelId).then(setChannel).catch(() => {});
@@ -21,6 +25,9 @@ export function ChannelDetailPage() {
     getUsageTimeseries(7).then(setTimeseries).catch(() => {});
   };
   useEffect(() => { load(); }, [channelId]);
+  useEffect(() => {
+    if (channel) setProbeModel(channel.probe_model || "");
+  }, [channel?.id, channel?.probe_model]);
 
   const activeKeys = keys.filter((k) => k.is_active).length;
 
@@ -50,6 +57,36 @@ export function ChannelDetailPage() {
     const result = await probeKey(keyId);
     setProbeResult(result);
     load();
+  };
+
+  const handleLoadModels = async () => {
+    setModelLoading(true);
+    setModelMsg("");
+    try {
+      const models = await listChannelModels(channelId);
+      setModelOptions(models);
+      if (!probeModel && models.length > 0) setProbeModel(models[0]);
+      setModelMsg(models.length > 0 ? `已获取 ${models.length} 个模型` : "未获取到模型，可手动填写");
+    } catch (err) {
+      setModelMsg(err instanceof Error ? `获取模型失败：${err.message}` : "获取模型失败");
+    } finally {
+      setModelLoading(false);
+      setTimeout(() => setModelMsg(""), 3000);
+    }
+  };
+
+  const handleSaveProbeModel = async () => {
+    if (!channel) return;
+    setModelMsg("");
+    try {
+      const updated = await updateChannel(channel.id, { probe_model: probeModel.trim() });
+      setChannel(updated);
+      setModelMsg("探测模型已保存");
+    } catch {
+      setModelMsg("保存探测模型失败");
+    } finally {
+      setTimeout(() => setModelMsg(""), 3000);
+    }
   };
 
   const columns = [
@@ -100,6 +137,37 @@ export function ChannelDetailPage() {
         <h1 className="text-2xl font-bold">{channel.name}</h1>
         <p className="text-sm text-[var(--loop-muted)] mt-1">{channel.base_url}</p>
         {channel.description && <p className="text-sm text-[var(--loop-muted)]">{channel.description}</p>}
+      </div>
+      <div className="rounded-xl border border-[var(--loop-border)] bg-[var(--loop-card)] p-5 space-y-3">
+        <div>
+          <h2 className="text-sm font-medium">探测模型</h2>
+          <p className="text-xs text-[var(--loop-muted)] mt-1">用于手动探测和自动恢复探测。端点不支持模型列表时，可以直接手填模型 ID。</p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          {modelOptions.length > 0 && (
+            <select
+              value={modelOptions.includes(probeModel) ? probeModel : ""}
+              onChange={(e) => setProbeModel(e.target.value)}
+              className="min-w-64 px-3 py-2 rounded-xl bg-[var(--loop-bg)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm"
+            >
+              <option value="">从模型列表选择</option>
+              {modelOptions.map((model) => <option key={model} value={model}>{model}</option>)}
+            </select>
+          )}
+          <input
+            value={probeModel}
+            onChange={(e) => setProbeModel(e.target.value)}
+            placeholder="手动填写模型 ID"
+            className="min-w-80 flex-1 px-3 py-2 rounded-xl bg-[var(--loop-bg)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm placeholder:text-[var(--loop-muted)] focus:outline-none focus:border-[var(--loop-primary)]"
+          />
+          <button onClick={handleLoadModels} disabled={modelLoading} className="px-4 py-2 rounded-xl border border-[var(--loop-border)] text-sm hover:bg-white/5 disabled:opacity-40">
+            {modelLoading ? "获取中..." : "获取模型列表"}
+          </button>
+          <button onClick={handleSaveProbeModel} className="px-4 py-2 rounded-xl bg-[var(--loop-primary)] text-white text-sm hover:opacity-90">
+            保存
+          </button>
+        </div>
+        {modelMsg && <div className="text-xs text-[var(--loop-muted)]">{modelMsg}</div>}
       </div>
       <div className="grid grid-cols-3 gap-4">
         <StatCard label="密钥总数" value={keys.length} />
