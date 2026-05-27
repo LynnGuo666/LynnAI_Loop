@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { getChannel, listKeysByChannel, createKey, deleteKey, enableKey, probeKey, getUsageTimeseries, updateChannel, updateKey, listChannelModels } from "../api/client";
-import { StatCard, DataTable, ConfirmDialog, KeyFormModal } from "../components/common";
-import type { Channel, APIKey, TimeseriesPoint, KeyProbe } from "../types";
+import { getChannel, listKeysByChannel, createKey, deleteKey, enableKey, probeKey, getUsageTimeseries, updateChannel, updateKey, listChannelModels, exportKeys, importKeys } from "../api/client";
+import { StatCard, DataTable, ConfirmDialog, KeyFormModal, KeyImportModal } from "../components/common";
+import type { Channel, APIKey, TimeseriesPoint, KeyProbe, KeyImportItem } from "../types";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 export function ChannelDetailPage() {
@@ -12,6 +12,7 @@ export function ChannelDetailPage() {
   const [keys, setKeys] = useState<APIKey[]>([]);
   const [timeseries, setTimeseries] = useState<TimeseriesPoint[]>([]);
   const [showAddKey, setShowAddKey] = useState(false);
+  const [showImportKeys, setShowImportKeys] = useState(false);
   const [editingKey, setEditingKey] = useState<APIKey | null>(null);
   const [delKeyId, setDelKeyId] = useState<number | null>(null);
   const [probeResult, setProbeResult] = useState<KeyProbe | null>(null);
@@ -40,6 +41,17 @@ export function ChannelDetailPage() {
   const handleAddKey = async (data: { keyValue: string; alias: string }) => {
     await createKey(channelId, { key_value: data.keyValue, alias: data.alias });
     load();
+  };
+
+  const handleImportKeys = async (data: { keys: KeyImportItem[] }) => {
+    const result = await importKeys({ channel_id: channelId, keys: data.keys });
+    load();
+    return result;
+  };
+
+  const handleExportKeys = async () => {
+    const exported = await exportKeys(channelId);
+    downloadJSON(exported, `loop-keys-channel-${channelId}.json`);
   };
 
   const handleUpdateKey = async (data: { keyValue: string; alias: string }) => {
@@ -192,9 +204,17 @@ export function ChannelDetailPage() {
       </div>
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">API 密钥</h2>
-        <button onClick={() => setShowAddKey(true)} className="px-4 py-2 rounded-xl bg-[var(--loop-primary)] text-white text-sm font-medium hover:opacity-90 transition">
-          + 添加密钥
-        </button>
+        <div className="flex gap-3">
+          <button onClick={() => setShowAddKey(true)} className="px-4 py-2 rounded-xl bg-[var(--loop-primary)] text-white text-sm font-medium hover:opacity-90 transition">
+            + 添加密钥
+          </button>
+          <button onClick={() => setShowImportKeys(true)} className="px-4 py-2 rounded-xl border border-[var(--loop-border)] text-sm hover:bg-white/5">
+            导入
+          </button>
+          <button onClick={handleExportKeys} className="px-4 py-2 rounded-xl border border-[var(--loop-border)] text-sm hover:bg-white/5">
+            导出
+          </button>
+        </div>
       </div>
       <DataTable columns={columns} data={keys} empty="暂未添加密钥" />
       <div className="rounded-xl border border-[var(--loop-border)] bg-[var(--loop-card)] p-6">
@@ -219,6 +239,13 @@ export function ChannelDetailPage() {
           fixedChannelId={channelId}
           onClose={() => setShowAddKey(false)}
           onSubmit={handleAddKey}
+        />
+      )}
+      {showImportKeys && (
+        <KeyImportModal
+          fixedChannelId={channelId}
+          onClose={() => setShowImportKeys(false)}
+          onImport={handleImportKeys}
         />
       )}
       {editingKey && (
@@ -246,4 +273,14 @@ export function ChannelDetailPage() {
       )}
     </div>
   );
+}
+
+function downloadJSON(data: unknown, filename: string) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }

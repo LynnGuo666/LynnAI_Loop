@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { listAllKeys, enableKey, probeKey, listChannels, deleteKey, createKey, updateKey } from "../api/client";
-import { DataTable, ConfirmDialog, KeyFormModal } from "../components/common";
-import type { APIKey, Channel, KeyProbe } from "../types";
+import { listAllKeys, enableKey, probeKey, listChannels, deleteKey, createKey, updateKey, exportKeys, importKeys } from "../api/client";
+import { DataTable, ConfirmDialog, KeyFormModal, KeyImportModal } from "../components/common";
+import type { APIKey, Channel, KeyImportItem, KeyProbe } from "../types";
 
 export function KeysPage() {
   const [keys, setKeys] = useState<APIKey[]>([]);
@@ -9,6 +9,7 @@ export function KeysPage() {
   const [filterChannel, setFilterChannel] = useState<number | "">("");
   const [filterStatus, setFilterStatus] = useState<"all" | "active" | "disabled">("all");
   const [showAddKey, setShowAddKey] = useState(false);
+  const [showImportKeys, setShowImportKeys] = useState(false);
   const [editingKey, setEditingKey] = useState<APIKey | null>(null);
   const [delKeyId, setDelKeyId] = useState<number | null>(null);
   const [probeResult, setProbeResult] = useState<KeyProbe | null>(null);
@@ -34,6 +35,16 @@ export function KeysPage() {
   const handleAddKey = async (data: { channelId: number; keyValue: string; alias: string }) => {
     await createKey(data.channelId, { key_value: data.keyValue, alias: data.alias });
     load();
+  };
+  const handleImportKeys = async (data: { channelId?: number; keys: KeyImportItem[] }) => {
+    const result = await importKeys({ channel_id: data.channelId, keys: data.keys });
+    load();
+    return result;
+  };
+  const handleExportKeys = async () => {
+    const channelId = filterChannel === "" ? undefined : filterChannel;
+    const exported = await exportKeys(channelId);
+    downloadJSON(exported, `loop-keys${channelId ? `-channel-${channelId}` : ""}.json`);
   };
   const handleUpdateKey = async (data: { keyValue: string; alias: string }) => {
     if (!editingKey) return;
@@ -103,6 +114,12 @@ export function KeysPage() {
           <button onClick={() => setShowAddKey(true)} className="px-4 py-2 rounded-xl bg-[var(--loop-primary)] text-white text-sm font-medium hover:opacity-90 transition">
             + 添加密钥
           </button>
+          <button onClick={() => setShowImportKeys(true)} className="px-4 py-2 rounded-xl border border-[var(--loop-border)] text-sm hover:bg-white/5">
+            导入
+          </button>
+          <button onClick={handleExportKeys} className="px-4 py-2 rounded-xl border border-[var(--loop-border)] text-sm hover:bg-white/5">
+            导出
+          </button>
         </div>
       </div>
       <div className="flex gap-3">
@@ -133,6 +150,13 @@ export function KeysPage() {
           onSubmit={handleAddKey}
         />
       )}
+      {showImportKeys && (
+        <KeyImportModal
+          channels={channels}
+          onClose={() => setShowImportKeys(false)}
+          onImport={handleImportKeys}
+        />
+      )}
       {editingKey && (
         <KeyFormModal
           title="编辑 API 密钥"
@@ -158,4 +182,14 @@ export function KeysPage() {
       )}
     </div>
   );
+}
+
+function downloadJSON(data: unknown, filename: string) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }

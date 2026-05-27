@@ -43,6 +43,8 @@ func NewRouter(h *Handlers, sh *SettingsHandlers, proxy *services.ProxyHandler, 
 
 		// Keys (standalone)
 		r.Get("/api/keys", h.ListAllKeys)
+		r.Get("/api/keys/export", h.ExportKeys)
+		r.Post("/api/keys/import", h.ImportKeys)
 		r.Get("/api/keys/{id}", h.GetKey)
 		r.Put("/api/keys/{id}", h.UpdateKey)
 		r.Delete("/api/keys/{id}", h.DeleteKey)

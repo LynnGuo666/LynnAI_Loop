@@ -5,6 +5,9 @@ import type {
   UsageStats,
   TimeseriesPoint,
   KeyProbe,
+  KeyExportResponse,
+  KeyImportItem,
+  KeyImportResponse,
 } from "../types";
 
 const BASE = "";
@@ -63,6 +66,14 @@ export const createKey = (channelId: number, data: Partial<APIKey>) =>
 export const getKey = (id: number) => request<APIKey>(`/api/keys/${id}`);
 export const updateKey = (id: number, data: Partial<APIKey>) =>
   request<APIKey>(`/api/keys/${id}`, { method: "PUT", body: JSON.stringify(data) });
+export const exportKeys = (channelId?: number) => {
+  const params = new URLSearchParams();
+  if (channelId) params.set("channel_id", String(channelId));
+  const suffix = params.toString();
+  return request<KeyExportResponse>(`/api/keys/export${suffix ? `?${suffix}` : ""}`);
+};
+export const importKeys = (data: { channel_id?: number; keys: KeyImportItem[] }) =>
+  request<KeyImportResponse>("/api/keys/import", { method: "POST", body: JSON.stringify(data) });
 export const deleteKey = (id: number) =>
   request<{ status: string }>(`/api/keys/${id}`, { method: "DELETE" });
 export const enableKey = (id: number) =>

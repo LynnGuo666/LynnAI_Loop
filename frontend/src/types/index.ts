@@ -78,3 +78,23 @@ export interface KeyProbe {
   error_msg: string;
   created_at: string;
 }
+
+export interface KeyImportItem {
+  channel_id?: number;
+  key_value: string;
+  alias?: string;
+  is_active?: boolean;
+}
+
+export interface KeyExportResponse {
+  data: KeyImportItem[];
+  count: number;
+}
+
+export interface KeyImportResponse {
+  created: number;
+  skipped: number;
+  failed: number;
+  keys: APIKey[];
+  errors: Array<{ index: number; message: string }>;
+}
