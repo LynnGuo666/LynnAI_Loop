@@ -3,7 +3,6 @@ package services
 import (
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"loop/internal/config"
 	"loop/internal/models"
@@ -47,35 +46,11 @@ func (kr *KeyRotator) Select(channelID int64) (*models.APIKey, error) {
 }
 
 func (kr *KeyRotator) ReportSuccess(keyID int64) {
-	k, err := kr.keyRepo.GetByID(keyID)
-	if err != nil {
-		return
-	}
-	k.ConsecutiveFailures = 0
-	k.TotalSuccesses++
-	now := time.Now()
-	k.LastUsedAt = &now
-	kr.keyRepo.Update(k)
+	kr.keyRepo.RecordSuccess(keyID)
 }
 
 func (kr *KeyRotator) ReportFailure(keyID int64) {
-	k, err := kr.keyRepo.GetByID(keyID)
-	if err != nil {
-		return
-	}
-	k.ConsecutiveFailures++
-	k.TotalFailures++
-	now := time.Now()
-	k.LastFailureAt = &now
-	k.LastUsedAt = &now
-
-	if k.ConsecutiveFailures >= kr.cfg.DisableThreshold {
-		k.IsActive = false
-		k.DisabledAt = &now
-		nextProbe := now.Add(time.Duration(k.ProbeBackoffMin) * time.Minute)
-		k.NextProbeAt = &nextProbe
-	}
-	kr.keyRepo.Update(k)
+	kr.keyRepo.RecordFailure(keyID, kr.cfg.DisableThreshold)
 }
 
 func (kr *KeyRotator) ActiveKeyCount(channelID int64) (int, error) {

@@ -40,11 +40,13 @@ CREATE TABLE IF NOT EXISTS usage_logs (
     output_tokens INTEGER NOT NULL DEFAULT 0,
     cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
     cache_read_tokens INTEGER NOT NULL DEFAULT 0,
-    is_stream INTEGER NOT NULL DEFAULT 0,
-    status_code INTEGER NOT NULL DEFAULT 0,
-    latency_ms INTEGER NOT NULL DEFAULT 0,
-    success INTEGER NOT NULL DEFAULT 0,
-    error_message TEXT NOT NULL DEFAULT '',
+	    is_stream INTEGER NOT NULL DEFAULT 0,
+	    status_code INTEGER NOT NULL DEFAULT 0,
+	    latency_ms INTEGER NOT NULL DEFAULT 0,
+	    first_token_ms INTEGER NOT NULL DEFAULT 0,
+	    output_tokens_per_sec REAL NOT NULL DEFAULT 0,
+	    success INTEGER NOT NULL DEFAULT 0,
+	    error_message TEXT NOT NULL DEFAULT '',
     client_ip TEXT NOT NULL DEFAULT '',
     created_at DATETIME NOT NULL DEFAULT (datetime('now'))
 );

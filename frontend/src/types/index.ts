@@ -43,6 +43,8 @@ export interface UsageLog {
   is_stream: boolean;
   status_code: number;
   latency_ms: number;
+  first_token_ms: number;
+  output_tokens_per_sec: number;
   success: boolean;
   error_message: string;
   client_ip: string;
@@ -56,6 +58,8 @@ export interface UsageStats {
   total_cache_tokens: number;
   success_count: number;
   failure_count: number;
+  avg_first_token_ms: number;
+  avg_output_tokens_per_sec: number;
 }
 
 export interface TimeseriesPoint {

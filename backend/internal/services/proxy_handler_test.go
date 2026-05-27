@@ -84,3 +84,43 @@ func TestExtractTokensFromStreamingEvents(t *testing.T) {
 		t.Fatalf("cacheRead = %d, want 33", cacheRead)
 	}
 }
+
+func TestOutputTokensPerSec(t *testing.T) {
+	tests := []struct {
+		name       string
+		tokens     int64
+		durationMs int64
+		want       float64
+	}{
+		{name: "normal", tokens: 30, durationMs: 1500, want: 20},
+		{name: "zero tokens", tokens: 0, durationMs: 1500, want: 0},
+		{name: "zero duration", tokens: 30, durationMs: 0, want: 0},
+		{name: "negative duration", tokens: 30, durationMs: -1, want: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := outputTokensPerSec(tt.tokens, tt.durationMs); got != tt.want {
+				t.Fatalf("outputTokensPerSec() = %f, want %f", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEventHasTextDelta(t *testing.T) {
+	textEvent := map[string]json.RawMessage{
+		"type":  json.RawMessage(`"content_block_delta"`),
+		"delta": json.RawMessage(`{"type":"text_delta","text":"hi"}`),
+	}
+	emptyEvent := map[string]json.RawMessage{
+		"type":  json.RawMessage(`"message_delta"`),
+		"usage": json.RawMessage(`{"output_tokens": 12}`),
+	}
+
+	if !eventHasTextDelta(textEvent) {
+		t.Fatalf("eventHasTextDelta(textEvent) = false, want true")
+	}
+	if eventHasTextDelta(emptyEvent) {
+		t.Fatalf("eventHasTextDelta(emptyEvent) = true, want false")
+	}
+}

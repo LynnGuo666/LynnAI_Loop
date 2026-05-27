@@ -48,6 +48,8 @@ export function UsagePage() {
     if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
     return String(n);
   };
+  const formatMs = (n?: number) => (n && n > 0 ? `${Math.round(n)}ms` : "-");
+  const formatSpeed = (n?: number) => (n && n > 0 ? `${n.toFixed(1)} tok/s` : "-");
 
   const columns = [
     { key: "id", label: "ID" },
@@ -83,6 +85,12 @@ export function UsagePage() {
       render: (l: UsageLog) => formatTokens(l.cache_read_tokens),
     },
     { key: "latency_ms", label: "延迟", render: (l: UsageLog) => `${l.latency_ms}ms` },
+    { key: "first_token_ms", label: "首字", render: (l: UsageLog) => formatMs(l.first_token_ms) },
+    {
+      key: "output_tokens_per_sec",
+      label: "输出速度",
+      render: (l: UsageLog) => formatSpeed(l.output_tokens_per_sec),
+    },
     {
       key: "success",
       label: "状态",
@@ -108,11 +116,13 @@ export function UsagePage() {
         <h1 className="text-2xl font-bold">用量</h1>
         <p className="text-sm text-[var(--loop-muted)] mt-1">这里只统计外部业务请求；手动探测和自动恢复探测不计入用量。</p>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
         <StatCard label="请求总数" value={stats?.total_requests ?? 0} />
         <StatCard label="输入令牌" value={formatTokens(stats?.total_input_tokens ?? 0)} />
         <StatCard label="输出令牌" value={formatTokens(stats?.total_output_tokens ?? 0)} />
         <StatCard label="缓存令牌" value={formatTokens(stats?.total_cache_tokens ?? 0)} />
+        <StatCard label="平均首字" value={formatMs(stats?.avg_first_token_ms)} />
+        <StatCard label="平均输出速度" value={formatSpeed(stats?.avg_output_tokens_per_sec)} />
         <StatCard label="成功" value={stats?.success_count ?? 0} color="text-green-400" />
         <StatCard label="失败" value={stats?.failure_count ?? 0} color="text-red-400" />
       </div>

@@ -21,6 +21,12 @@ func Open(dbPath string) (*sql.DB, error) {
 	if err := ensureColumn(db, "channels", "probe_model", "ALTER TABLE channels ADD COLUMN probe_model TEXT NOT NULL DEFAULT ''"); err != nil {
 		return nil, fmt.Errorf("migrate channels.probe_model: %w", err)
 	}
+	if err := ensureColumn(db, "usage_logs", "first_token_ms", "ALTER TABLE usage_logs ADD COLUMN first_token_ms INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return nil, fmt.Errorf("migrate usage_logs.first_token_ms: %w", err)
+	}
+	if err := ensureColumn(db, "usage_logs", "output_tokens_per_sec", "ALTER TABLE usage_logs ADD COLUMN output_tokens_per_sec REAL NOT NULL DEFAULT 0"); err != nil {
+		return nil, fmt.Errorf("migrate usage_logs.output_tokens_per_sec: %w", err)
+	}
 	return db, nil
 }
 

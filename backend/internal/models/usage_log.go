@@ -15,6 +15,8 @@ type UsageLog struct {
 	IsStream            bool      `json:"is_stream"`
 	StatusCode          int       `json:"status_code"`
 	LatencyMs           int64     `json:"latency_ms"`
+	FirstTokenMs        int64     `json:"first_token_ms"`
+	OutputTokensPerSec  float64   `json:"output_tokens_per_sec"`
 	Success             bool      `json:"success"`
 	ErrorMessage        string    `json:"error_message"`
 	ClientIP            string    `json:"client_ip"`

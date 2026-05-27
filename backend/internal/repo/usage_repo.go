@@ -19,12 +19,13 @@ func NewUsageRepo(db *sql.DB) *UsageRepo {
 func (r *UsageRepo) Create(log *models.UsageLog) error {
 	result, err := r.db.Exec(
 		`INSERT INTO usage_logs (channel_id, api_key_id, model, endpoint, input_tokens, output_tokens,
-		        cache_creation_tokens, cache_read_tokens, is_stream, status_code, latency_ms, success,
-		        error_message, client_ip, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		        cache_creation_tokens, cache_read_tokens, is_stream, status_code, latency_ms,
+		        first_token_ms, output_tokens_per_sec, success, error_message, client_ip, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		log.ChannelID, log.APIKeyID, log.Model, log.Endpoint, log.InputTokens, log.OutputTokens,
 		log.CacheCreationTokens, log.CacheReadTokens, boolToInt(log.IsStream), log.StatusCode,
-		log.LatencyMs, boolToInt(log.Success), log.ErrorMessage, log.ClientIP, log.CreatedAt,
+		log.LatencyMs, log.FirstTokenMs, log.OutputTokensPerSec, boolToInt(log.Success),
+		log.ErrorMessage, log.ClientIP, log.CreatedAt,
 	)
 	if err != nil {
 		return err
@@ -64,7 +65,7 @@ func (r *UsageRepo) List(f UsageFilter) ([]models.UsageLog, int, error) {
 	query := fmt.Sprintf(
 		`SELECT id, channel_id, api_key_id, model, endpoint, input_tokens, output_tokens,
 		        cache_creation_tokens, cache_read_tokens, is_stream, status_code, latency_ms,
-		        success, error_message, client_ip, created_at
+		        first_token_ms, output_tokens_per_sec, success, error_message, client_ip, created_at
 		 FROM usage_logs %s ORDER BY id DESC LIMIT ? OFFSET ?`, where,
 	)
 	args = append(args, f.PageSize, offset)
@@ -81,7 +82,8 @@ func (r *UsageRepo) List(f UsageFilter) ([]models.UsageLog, int, error) {
 		var isStream, success int
 		if err := rows.Scan(&l.ID, &l.ChannelID, &l.APIKeyID, &l.Model, &l.Endpoint,
 			&l.InputTokens, &l.OutputTokens, &l.CacheCreationTokens, &l.CacheReadTokens,
-			&isStream, &l.StatusCode, &l.LatencyMs, &success, &l.ErrorMessage, &l.ClientIP, &l.CreatedAt); err != nil {
+			&isStream, &l.StatusCode, &l.LatencyMs, &l.FirstTokenMs, &l.OutputTokensPerSec,
+			&success, &l.ErrorMessage, &l.ClientIP, &l.CreatedAt); err != nil {
 			return nil, 0, err
 		}
 		l.IsStream = isStream == 1
@@ -92,12 +94,14 @@ func (r *UsageRepo) List(f UsageFilter) ([]models.UsageLog, int, error) {
 }
 
 type UsageStats struct {
-	TotalRequests int64 `json:"total_requests"`
-	TotalInput    int64 `json:"total_input_tokens"`
-	TotalOutput   int64 `json:"total_output_tokens"`
-	TotalCache    int64 `json:"total_cache_tokens"`
-	SuccessCount  int64 `json:"success_count"`
-	FailureCount  int64 `json:"failure_count"`
+	TotalRequests         int64   `json:"total_requests"`
+	TotalInput            int64   `json:"total_input_tokens"`
+	TotalOutput           int64   `json:"total_output_tokens"`
+	TotalCache            int64   `json:"total_cache_tokens"`
+	SuccessCount          int64   `json:"success_count"`
+	FailureCount          int64   `json:"failure_count"`
+	AvgFirstTokenMs       float64 `json:"avg_first_token_ms"`
+	AvgOutputTokensPerSec float64 `json:"avg_output_tokens_per_sec"`
 }
 
 func (r *UsageRepo) Stats(startDate, endDate string) (*UsageStats, error) {
@@ -107,11 +111,14 @@ func (r *UsageRepo) Stats(startDate, endDate string) (*UsageStats, error) {
 		`SELECT COUNT(*), COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0),
 		        COALESCE(SUM(cache_creation_tokens+cache_read_tokens),0),
 		        COALESCE(SUM(CASE WHEN success=1 THEN 1 ELSE 0 END),0),
-		        COALESCE(SUM(CASE WHEN success=0 THEN 1 ELSE 0 END),0)
-		 FROM usage_logs %s`, where,
+		        COALESCE(SUM(CASE WHEN success=0 THEN 1 ELSE 0 END),0),
+		        COALESCE(AVG(NULLIF(first_token_ms, 0)),0),
+		        COALESCE(AVG(NULLIF(output_tokens_per_sec, 0)),0)
+	 FROM usage_logs %s`, where,
 	)
 	err := r.db.QueryRow(query, args...).Scan(
 		&s.TotalRequests, &s.TotalInput, &s.TotalOutput, &s.TotalCache, &s.SuccessCount, &s.FailureCount,
+		&s.AvgFirstTokenMs, &s.AvgOutputTokensPerSec,
 	)
 	return s, err
 }

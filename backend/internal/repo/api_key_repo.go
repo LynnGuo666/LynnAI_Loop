@@ -102,6 +102,47 @@ func (r *APIKeyRepo) Update(k *models.APIKey) error {
 	return err
 }
 
+func (r *APIKeyRepo) RecordSuccess(id int64) error {
+	now := time.Now()
+	_, err := r.db.Exec(
+		`UPDATE api_keys
+		 SET consecutive_failures = 0,
+		     total_successes = total_successes + 1,
+		     last_used_at = ?,
+		     updated_at = ?
+		 WHERE id = ?`,
+		now, now, id,
+	)
+	return err
+}
+
+func (r *APIKeyRepo) RecordFailure(id int64, disableThreshold int) error {
+	now := time.Now()
+	_, err := r.db.Exec(
+		`UPDATE api_keys
+		 SET consecutive_failures = consecutive_failures + 1,
+		     total_failures = total_failures + 1,
+		     last_failure_at = ?,
+		     last_used_at = ?,
+		     is_active = CASE
+		         WHEN consecutive_failures + 1 >= ? THEN 0
+		         ELSE is_active
+		     END,
+		     disabled_at = CASE
+		         WHEN consecutive_failures + 1 >= ? THEN ?
+		         ELSE disabled_at
+		     END,
+		     next_probe_at = CASE
+		         WHEN consecutive_failures + 1 >= ? THEN datetime('now', '+' || probe_backoff_min || ' minutes')
+		         ELSE next_probe_at
+		     END,
+		     updated_at = ?
+		 WHERE id = ?`,
+		now, now, disableThreshold, disableThreshold, now, disableThreshold, now, id,
+	)
+	return err
+}
+
 func (r *APIKeyRepo) Delete(id int64) error {
 	_, err := r.db.Exec(`DELETE FROM api_keys WHERE id=?`, id)
 	return err

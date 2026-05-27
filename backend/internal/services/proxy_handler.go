@@ -226,6 +226,7 @@ func (ph *ProxyHandler) handleStreamResponse(w http.ResponseWriter, resp *http.R
 	flusher, canFlush := w.(http.Flusher)
 
 	var inputTokens, outputTokens, cacheCreate, cacheRead int64
+	var firstTokenMs int64
 	bodyReader, err := decodedBodyReader(resp)
 	if err != nil {
 		ph.rotator.ReportFailure(key.ID)
@@ -240,6 +241,9 @@ func (ph *ProxyHandler) handleStreamResponse(w http.ResponseWriter, resp *http.R
 			if data != "[DONE]" {
 				var event map[string]json.RawMessage
 				if json.Unmarshal([]byte(data), &event) == nil {
+					if firstTokenMs == 0 && eventHasTextDelta(event) {
+						firstTokenMs = time.Since(startTime).Milliseconds()
+					}
 					if t, ok := event["type"]; ok {
 						var eventType string
 						json.Unmarshal(t, &eventType)
@@ -264,7 +268,12 @@ func (ph *ProxyHandler) handleStreamResponse(w http.ResponseWriter, resp *http.R
 	}
 
 	latency := time.Since(startTime).Milliseconds()
-	ph.logUsage(key, ch, model, endpoint, inputTokens, outputTokens, cacheCreate, cacheRead, true, resp.StatusCode, latency, "", clientIP)
+	if firstTokenMs == 0 {
+		firstTokenMs = latency
+	}
+	outputSpeed := outputTokensPerSec(outputTokens, latency-firstTokenMs)
+	ph.logUsage(key, ch, model, endpoint, inputTokens, outputTokens, cacheCreate, cacheRead,
+		true, resp.StatusCode, latency, firstTokenMs, outputSpeed, "", clientIP)
 	return nil
 }
 
@@ -292,8 +301,9 @@ func (ph *ProxyHandler) handleNonStreamResponse(w http.ResponseWriter, resp *htt
 	usage := extractUsageFromBody(body)
 
 	latency := time.Since(startTime).Milliseconds()
+	outputSpeed := outputTokensPerSec(usage.OutputTokens, latency)
 	ph.logUsage(key, ch, model, endpoint, usage.InputTokens, usage.OutputTokens,
-		usage.CacheCreationTokens, usage.CacheReadTokens, false, resp.StatusCode, latency, "", clientIP)
+		usage.CacheCreationTokens, usage.CacheReadTokens, false, resp.StatusCode, latency, latency, outputSpeed, "", clientIP)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -301,7 +311,7 @@ func (ph *ProxyHandler) handleNonStreamResponse(w http.ResponseWriter, resp *htt
 	return nil
 }
 
-func (ph *ProxyHandler) logUsage(key *models.APIKey, ch *models.Channel, model, endpoint string, input, output, cacheCreate, cacheRead int64, isStream bool, statusCode int, latencyMs int64, errMsg, clientIP string) {
+func (ph *ProxyHandler) logUsage(key *models.APIKey, ch *models.Channel, model, endpoint string, input, output, cacheCreate, cacheRead int64, isStream bool, statusCode int, latencyMs, firstTokenMs int64, outputTokensPerSec float64, errMsg, clientIP string) {
 	if ph.usageRepo == nil {
 		return
 	}
@@ -317,6 +327,8 @@ func (ph *ProxyHandler) logUsage(key *models.APIKey, ch *models.Channel, model, 
 		IsStream:            isStream,
 		StatusCode:          statusCode,
 		LatencyMs:           latencyMs,
+		FirstTokenMs:        firstTokenMs,
+		OutputTokensPerSec:  outputTokensPerSec,
 		Success:             errMsg == "",
 		ErrorMessage:        errMsg,
 		ClientIP:            clientIP,
@@ -326,6 +338,33 @@ func (ph *ProxyHandler) logUsage(key *models.APIKey, ch *models.Channel, model, 
 
 func shouldRetry(statusCode int) bool {
 	return statusCode == 401 || statusCode == 403 || statusCode == 429 || statusCode >= 500
+}
+
+func outputTokensPerSec(outputTokens, durationMs int64) float64 {
+	if outputTokens <= 0 || durationMs <= 0 {
+		return 0
+	}
+	return float64(outputTokens) / (float64(durationMs) / 1000)
+}
+
+func eventHasTextDelta(event map[string]json.RawMessage) bool {
+	if delta, ok := event["delta"]; ok {
+		var d struct {
+			Text string `json:"text"`
+		}
+		if json.Unmarshal(delta, &d) == nil && strings.TrimSpace(d.Text) != "" {
+			return true
+		}
+	}
+	if block, ok := event["content_block"]; ok {
+		var b struct {
+			Text string `json:"text"`
+		}
+		if json.Unmarshal(block, &b) == nil && strings.TrimSpace(b.Text) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 type parsedUsage struct {
