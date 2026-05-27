@@ -11,12 +11,11 @@ func AuthMiddleware(token string) func(http.Handler) http.Handler {
 	expectedHash := sha256Hash(token)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			auth := r.Header.Get("Authorization")
-			if !strings.HasPrefix(auth, "Bearer ") {
-				http.Error(w, `{"error":{"type":"auth_error","message":"missing or invalid authorization header"}}`, http.StatusUnauthorized)
+			providedToken := tokenFromRequest(r)
+			if providedToken == "" {
+				http.Error(w, `{"error":{"type":"auth_error","message":"missing admin token"}}`, http.StatusUnauthorized)
 				return
 			}
-			providedToken := strings.TrimPrefix(auth, "Bearer ")
 			if sha256Hash(providedToken) != expectedHash {
 				http.Error(w, `{"error":{"type":"auth_error","message":"invalid token"}}`, http.StatusUnauthorized)
 				return
@@ -24,6 +23,14 @@ func AuthMiddleware(token string) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func tokenFromRequest(r *http.Request) string {
+	auth := r.Header.Get("Authorization")
+	if strings.HasPrefix(auth, "Bearer ") {
+		return strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
+	}
+	return strings.TrimSpace(r.Header.Get("x-api-key"))
 }
 
 func sha256Hash(s string) string {

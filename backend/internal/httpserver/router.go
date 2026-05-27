@@ -16,17 +16,17 @@ func NewRouter(h *Handlers, sh *SettingsHandlers, proxy *services.ProxyHandler, 
 	r.Use(chiMiddleware.Recoverer)
 	r.Use(corsMiddleware)
 
-	// Proxy endpoints (no auth)
-	r.Post("/channel/{channelID}/v1/messages", proxy.HandleMessages)
-	r.Get("/channel/{channelID}/v1/models", proxy.HandleModels)
-
-	// Auto-route for single channel: /v1/messages and /v1/models
-	r.Post("/v1/messages", proxy.HandleMessagesSingleChannel)
-	r.Get("/v1/models", proxy.HandleModelsSingleChannel)
-
-	// Admin API with auth
+	// Admin API and proxy endpoints require the admin token.
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.AuthMiddleware(adminToken))
+
+		// Proxy endpoints
+		r.Post("/channel/{channelID}/v1/messages", proxy.HandleMessages)
+		r.Get("/channel/{channelID}/v1/models", proxy.HandleModels)
+
+		// Auto-route for single channel: /v1/messages and /v1/models
+		r.Post("/v1/messages", proxy.HandleMessagesSingleChannel)
+		r.Get("/v1/models", proxy.HandleModelsSingleChannel)
 
 		r.Get("/api/healthz", sh.Healthz)
 

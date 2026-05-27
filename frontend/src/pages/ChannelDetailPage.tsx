@@ -138,10 +138,18 @@ export function ChannelDetailPage() {
         <p className="text-sm text-[var(--loop-muted)] mt-1">{channel.base_url}</p>
         {channel.description && <p className="text-sm text-[var(--loop-muted)]">{channel.description}</p>}
       </div>
+      <div className="rounded-xl border border-[var(--loop-border)] bg-[var(--loop-card)] p-5 space-y-2">
+        <h2 className="text-sm font-medium">调用提示</h2>
+        <div className="text-xs text-[var(--loop-muted)] space-y-1">
+          <p>外部调用此渠道：<span className="font-mono text-[var(--loop-text)]">/channel/{channel.id}/v1/messages</span></p>
+          <p>请求必须携带管理员令牌：<span className="font-mono text-[var(--loop-text)]">Authorization: Bearer &lt;adminToken&gt;</span> 或 <span className="font-mono text-[var(--loop-text)]">x-api-key: &lt;adminToken&gt;</span>。</p>
+          <p>探测会消耗上游少量请求，但只记录到探测历史，不计入用量统计。</p>
+        </div>
+      </div>
       <div className="rounded-xl border border-[var(--loop-border)] bg-[var(--loop-card)] p-5 space-y-3">
         <div>
           <h2 className="text-sm font-medium">探测模型</h2>
-          <p className="text-xs text-[var(--loop-muted)] mt-1">用于手动探测和自动恢复探测。端点不支持模型列表时，可以直接手填模型 ID。</p>
+          <p className="text-xs text-[var(--loop-muted)] mt-1">用于手动探测和自动恢复探测。端点不支持模型列表时，可以直接手填模型 ID；探测结果不会进入用量页。</p>
         </div>
         <div className="flex flex-wrap gap-3">
           {modelOptions.length > 0 && (

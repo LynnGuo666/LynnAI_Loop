@@ -88,7 +88,10 @@ export function UsagePage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">用量</h1>
+      <div>
+        <h1 className="text-2xl font-bold">用量</h1>
+        <p className="text-sm text-[var(--loop-muted)] mt-1">这里只统计外部业务请求；手动探测和自动恢复探测不计入用量。</p>
+      </div>
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
         <StatCard label="请求总数" value={stats?.total_requests ?? 0} />
         <StatCard label="输入令牌" value={formatTokens(stats?.total_input_tokens ?? 0)} />
