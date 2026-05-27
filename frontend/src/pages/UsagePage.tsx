@@ -66,6 +66,16 @@ export function UsagePage() {
       label: "输出",
       render: (l: UsageLog) => formatTokens(l.output_tokens),
     },
+    {
+      key: "cache_creation_tokens",
+      label: "缓存写",
+      render: (l: UsageLog) => formatTokens(l.cache_creation_tokens),
+    },
+    {
+      key: "cache_read_tokens",
+      label: "缓存读",
+      render: (l: UsageLog) => formatTokens(l.cache_read_tokens),
+    },
     { key: "latency_ms", label: "延迟", render: (l: UsageLog) => `${l.latency_ms}ms` },
     {
       key: "success",

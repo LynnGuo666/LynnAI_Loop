@@ -3,6 +3,8 @@ package services
 import (
 	"bufio"
 	"bytes"
+	"compress/gzip"
+	"compress/zlib"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -119,6 +121,7 @@ func (ph *ProxyHandler) HandleMessages(w http.ResponseWriter, r *http.Request) {
 		}
 
 		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept-Encoding", "identity")
 		req.Header.Set("x-api-key", key.KeyValue)
 		if v := r.Header.Get("anthropic-version"); v != "" {
 			req.Header.Set("anthropic-version", v)
@@ -181,6 +184,7 @@ func (ph *ProxyHandler) HandleModels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Header.Set("x-api-key", key.KeyValue)
+	req.Header.Set("Accept-Encoding", "identity")
 	req.Header.Set("anthropic-version", "2023-06-01")
 
 	resp, err := ph.client.Do(req)
@@ -222,7 +226,13 @@ func (ph *ProxyHandler) handleStreamResponse(w http.ResponseWriter, resp *http.R
 	flusher, canFlush := w.(http.Flusher)
 
 	var inputTokens, outputTokens, cacheCreate, cacheRead int64
-	scanner := bufio.NewScanner(resp.Body)
+	bodyReader, err := decodedBodyReader(resp)
+	if err != nil {
+		ph.rotator.ReportFailure(key.ID)
+		return err
+	}
+
+	scanner := bufio.NewScanner(bodyReader)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.HasPrefix(line, "data: ") {
@@ -237,7 +247,7 @@ func (ph *ProxyHandler) handleStreamResponse(w http.ResponseWriter, resp *http.R
 						case "message_start":
 							extractTokensFromMessageStart(event, &inputTokens, &cacheCreate, &cacheRead)
 						case "message_delta":
-							extractTokensFromMessageDelta(event, &outputTokens)
+							extractTokensFromMessageDelta(event, &inputTokens, &outputTokens, &cacheCreate, &cacheRead)
 						}
 					}
 				}
@@ -248,6 +258,10 @@ func (ph *ProxyHandler) handleStreamResponse(w http.ResponseWriter, resp *http.R
 			flusher.Flush()
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		ph.rotator.ReportFailure(key.ID)
+		return err
+	}
 
 	latency := time.Since(startTime).Milliseconds()
 	ph.logUsage(key, ch, model, endpoint, inputTokens, outputTokens, cacheCreate, cacheRead, true, resp.StatusCode, latency, "", clientIP)
@@ -255,7 +269,7 @@ func (ph *ProxyHandler) handleStreamResponse(w http.ResponseWriter, resp *http.R
 }
 
 func (ph *ProxyHandler) handleNonStreamResponse(w http.ResponseWriter, resp *http.Response, key *models.APIKey, ch *models.Channel, model, endpoint, clientIP string, startTime time.Time) error {
-	body, err := io.ReadAll(resp.Body)
+	body, err := readDecodedBody(resp)
 	resp.Body.Close()
 	if err != nil {
 		ph.rotator.ReportFailure(key.ID)
@@ -275,19 +289,11 @@ func (ph *ProxyHandler) handleNonStreamResponse(w http.ResponseWriter, resp *htt
 
 	ph.rotator.ReportSuccess(key.ID)
 
-	var usage struct {
-		Usage struct {
-			InputTokens         int64 `json:"input_tokens"`
-			OutputTokens        int64 `json:"output_tokens"`
-			CacheCreationTokens int64 `json:"cache_creation_input_tokens"`
-			CacheReadTokens     int64 `json:"cache_read_input_tokens"`
-		} `json:"usage"`
-	}
-	json.Unmarshal(body, &usage)
+	usage := extractUsageFromBody(body)
 
 	latency := time.Since(startTime).Milliseconds()
-	ph.logUsage(key, ch, model, endpoint, usage.Usage.InputTokens, usage.Usage.OutputTokens,
-		usage.Usage.CacheCreationTokens, usage.Usage.CacheReadTokens, false, resp.StatusCode, latency, "", clientIP)
+	ph.logUsage(key, ch, model, endpoint, usage.InputTokens, usage.OutputTokens,
+		usage.CacheCreationTokens, usage.CacheReadTokens, false, resp.StatusCode, latency, "", clientIP)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -322,30 +328,130 @@ func shouldRetry(statusCode int) bool {
 	return statusCode == 401 || statusCode == 403 || statusCode == 429 || statusCode >= 500
 }
 
+type parsedUsage struct {
+	InputTokens         int64
+	OutputTokens        int64
+	CacheCreationTokens int64
+	CacheReadTokens     int64
+}
+
+type anthropicUsage struct {
+	InputTokens               int64              `json:"input_tokens"`
+	OutputTokens              int64              `json:"output_tokens"`
+	CacheCreationInputTokens  int64              `json:"cache_creation_input_tokens"`
+	CacheReadInputTokens      int64              `json:"cache_read_input_tokens"`
+	CacheCreation             cacheCreationUsage `json:"cache_creation"`
+	CacheCreationInputTokens2 int64              `json:"cache_write_input_tokens"`
+	CacheReadInputTokens2     int64              `json:"cache_read_tokens"`
+}
+
+type cacheCreationUsage struct {
+	Ephemeral5mInputTokens int64 `json:"ephemeral_5m_input_tokens"`
+	Ephemeral1hInputTokens int64 `json:"ephemeral_1h_input_tokens"`
+}
+
+func readDecodedBody(resp *http.Response) ([]byte, error) {
+	reader, err := decodedBodyReader(resp)
+	if err != nil {
+		return nil, err
+	}
+	return io.ReadAll(reader)
+}
+
+func decodedBodyReader(resp *http.Response) (io.Reader, error) {
+	switch strings.ToLower(strings.TrimSpace(resp.Header.Get("Content-Encoding"))) {
+	case "", "identity":
+		return resp.Body, nil
+	case "gzip":
+		return gzip.NewReader(resp.Body)
+	case "deflate":
+		return zlib.NewReader(resp.Body)
+	default:
+		return nil, fmt.Errorf("unsupported content encoding: %s", resp.Header.Get("Content-Encoding"))
+	}
+}
+
+func extractUsageFromBody(body []byte) parsedUsage {
+	var envelope struct {
+		Usage json.RawMessage `json:"usage"`
+	}
+	if json.Unmarshal(body, &envelope) != nil || len(envelope.Usage) == 0 {
+		return parsedUsage{}
+	}
+	return parseUsage(envelope.Usage)
+}
+
+func parseUsage(raw json.RawMessage) parsedUsage {
+	var u anthropicUsage
+	if json.Unmarshal(raw, &u) != nil {
+		return parsedUsage{}
+	}
+	cacheCreation := u.CacheCreationInputTokens
+	if cacheCreation == 0 {
+		cacheCreation = u.CacheCreationInputTokens2
+	}
+	cacheCreation += u.CacheCreation.Ephemeral5mInputTokens + u.CacheCreation.Ephemeral1hInputTokens
+
+	cacheRead := u.CacheReadInputTokens
+	if cacheRead == 0 {
+		cacheRead = u.CacheReadInputTokens2
+	}
+
+	return parsedUsage{
+		InputTokens:         u.InputTokens,
+		OutputTokens:        u.OutputTokens,
+		CacheCreationTokens: cacheCreation,
+		CacheReadTokens:     cacheRead,
+	}
+}
+
+func mergeUsage(target *parsedUsage, next parsedUsage) {
+	if next.InputTokens != 0 {
+		target.InputTokens = next.InputTokens
+	}
+	if next.OutputTokens != 0 {
+		target.OutputTokens = next.OutputTokens
+	}
+	if next.CacheCreationTokens != 0 {
+		target.CacheCreationTokens = next.CacheCreationTokens
+	}
+	if next.CacheReadTokens != 0 {
+		target.CacheReadTokens = next.CacheReadTokens
+	}
+}
+
 func extractTokensFromMessageStart(event map[string]json.RawMessage, input, cacheCreate, cacheRead *int64) {
 	if msg, ok := event["message"]; ok {
 		var m struct {
-			Usage struct {
-				InputTokens         int64 `json:"input_tokens"`
-				CacheCreationTokens int64 `json:"cache_creation_input_tokens"`
-				CacheReadTokens     int64 `json:"cache_read_input_tokens"`
-			} `json:"usage"`
+			Usage json.RawMessage `json:"usage"`
 		}
-		if json.Unmarshal(msg, &m) == nil {
-			*input = m.Usage.InputTokens
-			*cacheCreate = m.Usage.CacheCreationTokens
-			*cacheRead = m.Usage.CacheReadTokens
+		if json.Unmarshal(msg, &m) == nil && len(m.Usage) > 0 {
+			usage := parseUsage(m.Usage)
+			if usage.InputTokens != 0 {
+				*input = usage.InputTokens
+			}
+			if usage.CacheCreationTokens != 0 {
+				*cacheCreate = usage.CacheCreationTokens
+			}
+			if usage.CacheReadTokens != 0 {
+				*cacheRead = usage.CacheReadTokens
+			}
 		}
 	}
 }
 
-func extractTokensFromMessageDelta(event map[string]json.RawMessage, output *int64) {
+func extractTokensFromMessageDelta(event map[string]json.RawMessage, input, output, cacheCreate, cacheRead *int64) {
 	if usage, ok := event["usage"]; ok {
-		var u struct {
-			OutputTokens int64 `json:"output_tokens"`
+		parsed := parsedUsage{
+			InputTokens:         *input,
+			OutputTokens:        *output,
+			CacheCreationTokens: *cacheCreate,
+			CacheReadTokens:     *cacheRead,
 		}
-		if json.Unmarshal(usage, &u) == nil {
-			*output = u.OutputTokens
-		}
+		mergeUsage(&parsed, parseUsage(usage))
+		*input = parsed.InputTokens
+		*output = parsed.OutputTokens
+		*cacheCreate = parsed.CacheCreationTokens
+		*cacheRead = parsed.CacheReadTokens
 	}
 }
