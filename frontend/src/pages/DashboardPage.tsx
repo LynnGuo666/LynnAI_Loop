@@ -28,17 +28,17 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Dashboard</h1>
+      <h1 className="text-2xl font-bold">仪表盘</h1>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <StatCard label="Channels" value={channels.length} />
-        <StatCard label="Total Keys" value={keys.length} />
-        <StatCard label="Active Keys" value={activeKeys} color="text-green-400" />
-        <StatCard label="Disabled Keys" value={disabledKeys} color="text-red-400" />
-        <StatCard label="Today Requests" value={stats?.total_requests ?? "-"} />
-        <StatCard label="Total Tokens" value={formatTokens((stats?.total_input_tokens ?? 0) + (stats?.total_output_tokens ?? 0))} />
+        <StatCard label="渠道数" value={channels.length} />
+        <StatCard label="密钥总数" value={keys.length} />
+        <StatCard label="可用密钥" value={activeKeys} color="text-green-400" />
+        <StatCard label="停用密钥" value={disabledKeys} color="text-red-400" />
+        <StatCard label="今日请求" value={stats?.total_requests ?? "-"} />
+        <StatCard label="令牌总量" value={formatTokens((stats?.total_input_tokens ?? 0) + (stats?.total_output_tokens ?? 0))} />
       </div>
       <div className="rounded-xl border border-[var(--loop-border)] bg-[var(--loop-card)] p-6">
-        <h2 className="text-sm font-medium text-[var(--loop-muted)] mb-4">7-Day Usage</h2>
+        <h2 className="text-sm font-medium text-[var(--loop-muted)] mb-4">近 7 天用量</h2>
         {timeseries.length > 0 ? (
           <ResponsiveContainer width="100%" height={280}>
             <AreaChart data={timeseries}>
@@ -55,12 +55,12 @@ export function DashboardPage() {
               <XAxis dataKey="date" tick={{ fill: "#6b7280", fontSize: 11 }} tickLine={false} axisLine={false} />
               <YAxis tick={{ fill: "#6b7280", fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={formatTokens} />
               <Tooltip contentStyle={{ background: "#1e1e2e", border: "1px solid #333", borderRadius: 8, fontSize: 12 }} labelStyle={{ color: "#9ca3af" }} />
-              <Area type="monotone" dataKey="input_tokens" stroke="#6366f1" fill="url(#inputGrad)" strokeWidth={2} name="Input" />
-              <Area type="monotone" dataKey="output_tokens" stroke="#22d3ee" fill="url(#outputGrad)" strokeWidth={2} name="Output" />
+              <Area type="monotone" dataKey="input_tokens" stroke="#6366f1" fill="url(#inputGrad)" strokeWidth={2} name="输入" />
+              <Area type="monotone" dataKey="output_tokens" stroke="#22d3ee" fill="url(#outputGrad)" strokeWidth={2} name="输出" />
             </AreaChart>
           </ResponsiveContainer>
         ) : (
-          <div className="h-64 flex items-center justify-center text-[var(--loop-muted)] text-sm">No data yet</div>
+          <div className="h-64 flex items-center justify-center text-[var(--loop-muted)] text-sm">暂无数据</div>
         )}
       </div>
     </div>

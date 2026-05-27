@@ -10,12 +10,14 @@ loop
 # Frontend
 frontend/node_modules/
 frontend/dist/
+*.tsbuildinfo
 
 # Embedded frontend (built by vite)
 backend/internal/httpserver/frontend_dist/
 
 # Go
 backend/vendor/
+.cache/
 
 # IDE
 .idea/

@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@import "@heroui/theme";
 
 :root {
   --loop-primary: oklch(0.65 0.24 265);

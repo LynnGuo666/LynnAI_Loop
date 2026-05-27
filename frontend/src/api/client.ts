@@ -30,8 +30,16 @@ async function request<T>(
   return res.json();
 }
 
+async function requestArray<T>(
+  path: string,
+  opts: RequestInit = {}
+): Promise<T[]> {
+  const data = await request<T[] | null>(path, opts);
+  return Array.isArray(data) ? data : [];
+}
+
 // Channels
-export const listChannels = () => request<Channel[]>("/api/channels");
+export const listChannels = () => requestArray<Channel>("/api/channels");
 export const createChannel = (data: Partial<Channel>) =>
   request<Channel>("/api/channels", { method: "POST", body: JSON.stringify(data) });
 export const getChannel = (id: number) => request<Channel>(`/api/channels/${id}`);
@@ -42,8 +50,8 @@ export const deleteChannel = (id: number) =>
 
 // Keys
 export const listKeysByChannel = (channelId: number) =>
-  request<APIKey[]>(`/api/channels/${channelId}/keys`);
-export const listAllKeys = () => request<APIKey[]>("/api/keys");
+  requestArray<APIKey>(`/api/channels/${channelId}/keys`);
+export const listAllKeys = () => requestArray<APIKey>("/api/keys");
 export const createKey = (channelId: number, data: Partial<APIKey>) =>
   request<APIKey>(`/api/channels/${channelId}/keys`, { method: "POST", body: JSON.stringify(data) });
 export const getKey = (id: number) => request<APIKey>(`/api/keys/${id}`);
@@ -73,9 +81,9 @@ export const listUsage = (f: UsageFilter = {}) => {
   Object.entries(f).forEach(([k, v]) => {
     if (v !== undefined && v !== "") params.set(k, String(v));
   });
-  return request<{ data: UsageLog[]; total: number; page: number }>(
+  return request<{ data: UsageLog[] | null; total: number; page: number }>(
     `/api/usage?${params}`
-  );
+  ).then((r) => ({ ...r, data: Array.isArray(r.data) ? r.data : [] }));
 };
 export const getUsageStats = (startDate?: string, endDate?: string) => {
   const params = new URLSearchParams();
@@ -84,8 +92,8 @@ export const getUsageStats = (startDate?: string, endDate?: string) => {
   return request<UsageStats>(`/api/usage/stats?${params}`);
 };
 export const getUsageTimeseries = (days = 7) =>
-  request<TimeseriesPoint[]>(`/api/usage/timeseries?days=${days}`);
-export const getUsageModels = () => request<string[]>("/api/usage/models");
+  requestArray<TimeseriesPoint>(`/api/usage/timeseries?days=${days}`);
+export const getUsageModels = () => requestArray<string>("/api/usage/models");
 
 // Settings
 export const getSettings = () => request<Record<string, string>>("/api/settings");

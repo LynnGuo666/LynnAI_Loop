@@ -121,7 +121,7 @@ func (r *APIKeyRepo) ListDisabledForProbe() ([]models.APIKey, error) {
 }
 
 func scanKeys(rows *sql.Rows) ([]models.APIKey, error) {
-	var keys []models.APIKey
+	keys := make([]models.APIKey, 0)
 	for rows.Next() {
 		var k models.APIKey
 		var isActive int

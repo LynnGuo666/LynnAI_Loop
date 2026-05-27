@@ -21,7 +21,7 @@ export function LoginPage() {
       navigate("/");
     } catch {
       localStorage.removeItem("loop_token");
-      setError("Invalid token");
+      setError("管理员令牌无效");
     } finally {
       setLoading(false);
     }
@@ -32,14 +32,14 @@ export function LoginPage() {
       <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-6 p-8">
         <div className="text-center">
           <h1 className="text-3xl font-bold text-[var(--loop-primary)]">Loop</h1>
-          <p className="text-sm text-[var(--loop-muted)] mt-2">API Key Rotation Proxy</p>
+          <p className="text-sm text-[var(--loop-muted)] mt-2">API 密钥轮换代理</p>
         </div>
         <div>
           <input
             type="password"
             value={token}
             onChange={(e) => setToken(e.target.value)}
-            placeholder="Enter admin token"
+            placeholder="输入管理员令牌"
             className="w-full px-4 py-3 rounded-xl bg-[var(--loop-card)] border border-[var(--loop-border)] text-[var(--loop-text)] placeholder:text-[var(--loop-muted)] focus:outline-none focus:border-[var(--loop-primary)] transition"
             autoFocus
           />
@@ -50,7 +50,7 @@ export function LoginPage() {
           disabled={loading || !token}
           className="w-full py-3 rounded-xl bg-[var(--loop-primary)] text-white font-medium hover:opacity-90 transition disabled:opacity-40"
         >
-          {loading ? "Verifying..." : "Login"}
+          {loading ? "验证中..." : "登录"}
         </button>
       </form>
     </div>

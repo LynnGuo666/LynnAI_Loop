@@ -49,7 +49,7 @@ func (r *ChannelRepo) List() ([]models.Channel, error) {
 	}
 	defer rows.Close()
 
-	var channels []models.Channel
+	channels := make([]models.Channel, 0)
 	for rows.Next() {
 		var ch models.Channel
 		var isActive int

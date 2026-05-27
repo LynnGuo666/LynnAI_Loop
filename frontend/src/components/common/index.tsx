@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import type { ReactNode } from "react";
 
 interface StatCardProps {
   label: string;
@@ -47,7 +47,7 @@ export function DataTable<T extends Record<string, any>>({ columns, data, empty 
           {data.length === 0 ? (
             <tr>
               <td colSpan={columns.length} className="px-4 py-8 text-center text-[var(--loop-muted)]">
-                {empty || "No data"}
+                {empty || "暂无数据"}
               </td>
             </tr>
           ) : (
@@ -85,10 +85,10 @@ export function ConfirmDialog({ open, title, message, onConfirm, onCancel, dange
         <p className="text-sm text-[var(--loop-muted)] mb-6">{message}</p>
         <div className="flex justify-end gap-3">
           <button onClick={onCancel} className="px-4 py-2 text-sm rounded-lg border border-[var(--loop-border)] hover:bg-white/5 transition">
-            Cancel
+            取消
           </button>
           <button onClick={onConfirm} className={`px-4 py-2 text-sm rounded-lg transition ${danger ? "bg-red-500 hover:bg-red-600 text-white" : "bg-[var(--loop-primary)] hover:opacity-90 text-white"}`}>
-            Confirm
+            确认
           </button>
         </div>
       </div>

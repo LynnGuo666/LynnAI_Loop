@@ -52,81 +52,81 @@ export function UsagePage() {
     { key: "id", label: "ID" },
     {
       key: "channel_id",
-      label: "Channel",
+      label: "渠道",
       render: (l: UsageLog) => channelMap.get(l.channel_id) || `#${l.channel_id}`,
     },
-    { key: "model", label: "Model" },
+    { key: "model", label: "模型" },
     {
       key: "input_tokens",
-      label: "Input",
+      label: "输入",
       render: (l: UsageLog) => formatTokens(l.input_tokens),
     },
     {
       key: "output_tokens",
-      label: "Output",
+      label: "输出",
       render: (l: UsageLog) => formatTokens(l.output_tokens),
     },
-    { key: "latency_ms", label: "Latency", render: (l: UsageLog) => `${l.latency_ms}ms` },
+    { key: "latency_ms", label: "延迟", render: (l: UsageLog) => `${l.latency_ms}ms` },
     {
       key: "success",
-      label: "Status",
+      label: "状态",
       render: (l: UsageLog) => (
         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${l.success ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>
-          {l.success ? l.status_code : `ERR ${l.status_code}`}
+          {l.success ? l.status_code : `错误 ${l.status_code}`}
         </span>
       ),
     },
     {
       key: "is_stream",
-      label: "Stream",
-      render: (l: UsageLog) => (l.is_stream ? "Yes" : "No"),
+      label: "流式",
+      render: (l: UsageLog) => (l.is_stream ? "是" : "否"),
     },
-    { key: "created_at", label: "Time", render: (l: UsageLog) => new Date(l.created_at).toLocaleString() },
+    { key: "created_at", label: "时间", render: (l: UsageLog) => new Date(l.created_at).toLocaleString() },
   ];
 
   const totalPages = Math.ceil(total / 20);
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Usage</h1>
+      <h1 className="text-2xl font-bold">用量</h1>
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-        <StatCard label="Total Requests" value={stats?.total_requests ?? 0} />
-        <StatCard label="Input Tokens" value={formatTokens(stats?.total_input_tokens ?? 0)} />
-        <StatCard label="Output Tokens" value={formatTokens(stats?.total_output_tokens ?? 0)} />
-        <StatCard label="Cache Tokens" value={formatTokens(stats?.total_cache_tokens ?? 0)} />
-        <StatCard label="Success" value={stats?.success_count ?? 0} color="text-green-400" />
-        <StatCard label="Failure" value={stats?.failure_count ?? 0} color="text-red-400" />
+        <StatCard label="请求总数" value={stats?.total_requests ?? 0} />
+        <StatCard label="输入令牌" value={formatTokens(stats?.total_input_tokens ?? 0)} />
+        <StatCard label="输出令牌" value={formatTokens(stats?.total_output_tokens ?? 0)} />
+        <StatCard label="缓存令牌" value={formatTokens(stats?.total_cache_tokens ?? 0)} />
+        <StatCard label="成功" value={stats?.success_count ?? 0} color="text-green-400" />
+        <StatCard label="失败" value={stats?.failure_count ?? 0} color="text-red-400" />
       </div>
       <div className="flex flex-wrap gap-3">
         <select value={filters.channel_id} onChange={(e) => { setFilters({ ...filters, channel_id: e.target.value }); setPage(1); }}
           className="px-3 py-2 rounded-xl bg-[var(--loop-card)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm">
-          <option value="">All Channels</option>
+          <option value="">全部渠道</option>
           {channels.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <select value={filters.model} onChange={(e) => { setFilters({ ...filters, model: e.target.value }); setPage(1); }}
           className="px-3 py-2 rounded-xl bg-[var(--loop-card)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm">
-          <option value="">All Models</option>
+          <option value="">全部模型</option>
           {models.map((m) => <option key={m} value={m}>{m}</option>)}
         </select>
         <select value={filters.success} onChange={(e) => { setFilters({ ...filters, success: e.target.value }); setPage(1); }}
           className="px-3 py-2 rounded-xl bg-[var(--loop-card)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm">
-          <option value="">All Results</option>
-          <option value="true">Success</option>
-          <option value="false">Failure</option>
+          <option value="">全部结果</option>
+          <option value="true">成功</option>
+          <option value="false">失败</option>
         </select>
         <input type="date" value={filters.start_date} onChange={(e) => { setFilters({ ...filters, start_date: e.target.value }); setPage(1); }}
           className="px-3 py-2 rounded-xl bg-[var(--loop-card)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm" />
         <input type="date" value={filters.end_date} onChange={(e) => { setFilters({ ...filters, end_date: e.target.value }); setPage(1); }}
           className="px-3 py-2 rounded-xl bg-[var(--loop-card)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm" />
       </div>
-      <DataTable columns={columns} data={logs} empty="No usage records" />
+      <DataTable columns={columns} data={logs} empty="暂无用量记录" />
       {totalPages > 1 && (
         <div className="flex justify-center gap-2">
           <button onClick={() => setPage(Math.max(1, page - 1))} disabled={page <= 1}
-            className="px-3 py-1.5 rounded-lg border border-[var(--loop-border)] text-sm disabled:opacity-30 hover:bg-white/5">Prev</button>
-          <span className="px-3 py-1.5 text-sm text-[var(--loop-muted)]">Page {page} / {totalPages}</span>
+            className="px-3 py-1.5 rounded-lg border border-[var(--loop-border)] text-sm disabled:opacity-30 hover:bg-white/5">上一页</button>
+          <span className="px-3 py-1.5 text-sm text-[var(--loop-muted)]">第 {page} / {totalPages} 页</span>
           <button onClick={() => setPage(Math.min(totalPages, page + 1))} disabled={page >= totalPages}
-            className="px-3 py-1.5 rounded-lg border border-[var(--loop-border)] text-sm disabled:opacity-30 hover:bg-white/5">Next</button>
+            className="px-3 py-1.5 rounded-lg border border-[var(--loop-border)] text-sm disabled:opacity-30 hover:bg-white/5">下一页</button>
         </div>
       )}
     </div>

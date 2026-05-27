@@ -2,11 +2,11 @@ import { NavLink, Outlet } from "react-router-dom";
 import { useAuthStore } from "../../stores/auth";
 
 const links = [
-  { to: "/", label: "Dashboard" },
-  { to: "/channels", label: "Channels" },
-  { to: "/keys", label: "Keys" },
-  { to: "/usage", label: "Usage" },
-  { to: "/settings", label: "Settings" },
+  { to: "/", label: "仪表盘" },
+  { to: "/channels", label: "渠道" },
+  { to: "/keys", label: "密钥" },
+  { to: "/usage", label: "用量" },
+  { to: "/settings", label: "设置" },
 ];
 
 export function Sidebar() {
@@ -38,7 +38,7 @@ export function Sidebar() {
         onClick={logout}
         className="m-3 px-3 py-2 text-sm rounded-lg text-[var(--loop-muted)] hover:text-red-400 hover:bg-red-400/10 transition"
       >
-        Logout
+        退出登录
       </button>
     </aside>
   );

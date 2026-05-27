@@ -75,7 +75,7 @@ func (r *UsageRepo) List(f UsageFilter) ([]models.UsageLog, int, error) {
 	}
 	defer rows.Close()
 
-	var logs []models.UsageLog
+	logs := make([]models.UsageLog, 0)
 	for rows.Next() {
 		var l models.UsageLog
 		var isStream, success int
@@ -138,7 +138,7 @@ func (r *UsageRepo) Timeseries(days int) ([]TimeseriesPoint, error) {
 	}
 	defer rows.Close()
 
-	var points []TimeseriesPoint
+	points := make([]TimeseriesPoint, 0)
 	for rows.Next() {
 		var p TimeseriesPoint
 		if err := rows.Scan(&p.Date, &p.Requests, &p.InputTokens, &p.OutputTokens); err != nil {
@@ -223,7 +223,7 @@ func (r *UsageRepo) DistinctModels() ([]string, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var models []string
+	models := make([]string, 0)
 	for rows.Next() {
 		var m string
 		if err := rows.Scan(&m); err != nil {

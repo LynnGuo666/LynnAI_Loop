@@ -14,9 +14,9 @@ export function SettingsPage() {
     try {
       const updated = await updateSettings(settings);
       setSettings(updated);
-      setMsg("Saved");
+      setMsg("已保存");
     } catch {
-      setMsg("Failed to save");
+      setMsg("保存失败");
     } finally {
       setSaving(false);
       setTimeout(() => setMsg(""), 2000);
@@ -25,17 +25,17 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-6 max-w-xl">
-      <h1 className="text-2xl font-bold">Settings</h1>
+      <h1 className="text-2xl font-bold">设置</h1>
       <div className="space-y-5">
         <SettingToggle
-          label="Recovery Probe"
-          description="Periodically probe disabled keys and re-enable when they recover"
+          label="恢复探测"
+          description="定期探测已停用的密钥，恢复可用后自动重新启用"
           value={settings.recovery_probe_enabled === "true"}
           onChange={(v) => setSettings({ ...settings, recovery_probe_enabled: String(v) })}
         />
         <SettingInput
-          label="Auto Disable Threshold"
-          description="Number of consecutive failures before a key is automatically disabled"
+          label="自动停用阈值"
+          description="密钥连续失败达到该次数后会被自动停用"
           value={settings.auto_disable_threshold || "5"}
           onChange={(v) => setSettings({ ...settings, auto_disable_threshold: v })}
           type="number"
@@ -44,7 +44,7 @@ export function SettingsPage() {
       <div className="flex items-center gap-3">
         <button onClick={handleSave} disabled={saving}
           className="px-5 py-2.5 rounded-xl bg-[var(--loop-primary)] text-white text-sm font-medium hover:opacity-90 transition disabled:opacity-40">
-          {saving ? "Saving..." : "Save Changes"}
+          {saving ? "保存中..." : "保存更改"}
         </button>
         {msg && <span className="text-sm text-green-400">{msg}</span>}
       </div>
