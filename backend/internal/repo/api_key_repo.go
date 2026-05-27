@@ -2,12 +2,18 @@ package repo
 
 import (
 	"database/sql"
+	"errors"
 	"loop/internal/models"
+	"strings"
+	"sync"
 	"time"
 )
 
+var ErrDuplicateAPIKey = errors.New("duplicate_api_key")
+
 type APIKeyRepo struct {
 	db *sql.DB
+	mu sync.Mutex
 }
 
 func NewAPIKeyRepo(db *sql.DB) *APIKeyRepo {
@@ -15,6 +21,16 @@ func NewAPIKeyRepo(db *sql.DB) *APIKeyRepo {
 }
 
 func (r *APIKeyRepo) Create(k *models.APIKey) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	k.KeyValue = strings.TrimSpace(k.KeyValue)
+	if exists, err := r.ExistsKeyValue(k.KeyValue, 0); err != nil {
+		return err
+	} else if exists {
+		return ErrDuplicateAPIKey
+	}
+
 	now := time.Now()
 	result, err := r.db.Exec(
 		`INSERT INTO api_keys (channel_id, key_value, alias, is_active, probe_backoff_min, created_at, updated_at)
@@ -92,6 +108,16 @@ func (r *APIKeyRepo) ListAll() ([]models.APIKey, error) {
 }
 
 func (r *APIKeyRepo) Update(k *models.APIKey) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	k.KeyValue = strings.TrimSpace(k.KeyValue)
+	if exists, err := r.ExistsKeyValue(k.KeyValue, k.ID); err != nil {
+		return err
+	} else if exists {
+		return ErrDuplicateAPIKey
+	}
+
 	_, err := r.db.Exec(
 		`UPDATE api_keys SET alias=?, is_active=?, consecutive_failures=?, total_failures=?, total_successes=?,
 		        last_used_at=?, last_failure_at=?, disabled_at=?, next_probe_at=?, probe_backoff_min=?, updated_at=?
@@ -100,6 +126,28 @@ func (r *APIKeyRepo) Update(k *models.APIKey) error {
 		k.LastUsedAt, k.LastFailureAt, k.DisabledAt, k.NextProbeAt, k.ProbeBackoffMin, time.Now(), k.ID,
 	)
 	return err
+}
+
+func (r *APIKeyRepo) ExistsKeyValue(keyValue string, excludeID int64) (bool, error) {
+	keyValue = strings.TrimSpace(keyValue)
+	if keyValue == "" {
+		return false, nil
+	}
+
+	query := `SELECT 1 FROM api_keys WHERE key_value = ?`
+	args := []interface{}{keyValue}
+	if excludeID > 0 {
+		query += ` AND id != ?`
+		args = append(args, excludeID)
+	}
+	query += ` LIMIT 1`
+
+	var one int
+	err := r.db.QueryRow(query, args...).Scan(&one)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 func (r *APIKeyRepo) RecordSuccess(id int64) error {

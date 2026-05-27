@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { listAllKeys, enableKey, probeKey, listChannels, deleteKey } from "../api/client";
-import { DataTable, ConfirmDialog } from "../components/common";
+import { listAllKeys, enableKey, probeKey, listChannels, deleteKey, createKey, updateKey } from "../api/client";
+import { DataTable, ConfirmDialog, KeyFormModal } from "../components/common";
 import type { APIKey, Channel, KeyProbe } from "../types";
 
 export function KeysPage() {
@@ -8,6 +8,8 @@ export function KeysPage() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [filterChannel, setFilterChannel] = useState<number | "">("");
   const [filterStatus, setFilterStatus] = useState<"all" | "active" | "disabled">("all");
+  const [showAddKey, setShowAddKey] = useState(false);
+  const [editingKey, setEditingKey] = useState<APIKey | null>(null);
   const [delKeyId, setDelKeyId] = useState<number | null>(null);
   const [probeResult, setProbeResult] = useState<KeyProbe | null>(null);
 
@@ -29,6 +31,16 @@ export function KeysPage() {
   const handleEnable = async (id: number) => { await enableKey(id); load(); };
   const handleProbe = async (id: number) => { const r = await probeKey(id); setProbeResult(r); load(); };
   const handleDelete = async () => { if (delKeyId) await deleteKey(delKeyId); setDelKeyId(null); load(); };
+  const handleAddKey = async (data: { channelId: number; keyValue: string; alias: string }) => {
+    await createKey(data.channelId, { key_value: data.keyValue, alias: data.alias });
+    load();
+  };
+  const handleUpdateKey = async (data: { keyValue: string; alias: string }) => {
+    if (!editingKey) return;
+    await updateKey(editingKey.id, { key_value: data.keyValue, alias: data.alias });
+    setEditingKey(null);
+    load();
+  };
 
   const handleBatchEnable = async () => {
     const disabled = filtered.filter((k) => !k.is_active);
@@ -68,6 +80,7 @@ export function KeysPage() {
       render: (k: APIKey) => (
         <div className="flex gap-2 text-xs">
           {!k.is_active && <button onClick={() => handleEnable(k.id)} className="text-green-400 hover:text-green-300">启用</button>}
+          <button onClick={() => setEditingKey(k)} className="text-[var(--loop-primary)] hover:opacity-80">编辑</button>
           <button onClick={() => handleProbe(k.id)} className="text-blue-400 hover:text-blue-300">探测</button>
           <button onClick={() => setDelKeyId(k.id)} className="text-red-400 hover:text-red-300">删除</button>
         </div>
@@ -81,11 +94,16 @@ export function KeysPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">API 密钥</h1>
-        {disabledCount > 0 && (
-          <button onClick={handleBatchEnable} className="px-4 py-2 rounded-xl bg-green-500/20 text-green-400 text-sm font-medium hover:bg-green-500/30 transition">
-            启用全部停用密钥（{disabledCount}）
+        <div className="flex gap-3">
+          {disabledCount > 0 && (
+            <button onClick={handleBatchEnable} className="px-4 py-2 rounded-xl bg-green-500/20 text-green-400 text-sm font-medium hover:bg-green-500/30 transition">
+              启用全部停用密钥（{disabledCount}）
+            </button>
+          )}
+          <button onClick={() => setShowAddKey(true)} className="px-4 py-2 rounded-xl bg-[var(--loop-primary)] text-white text-sm font-medium hover:opacity-90 transition">
+            + 添加密钥
           </button>
-        )}
+        </div>
       </div>
       <div className="flex gap-3">
         <select
@@ -107,6 +125,22 @@ export function KeysPage() {
         </select>
       </div>
       <DataTable columns={columns} data={filtered} empty="未找到密钥" />
+      {showAddKey && (
+        <KeyFormModal
+          title="添加 API 密钥"
+          channels={channels}
+          onClose={() => setShowAddKey(false)}
+          onSubmit={handleAddKey}
+        />
+      )}
+      {editingKey && (
+        <KeyFormModal
+          title="编辑 API 密钥"
+          initialKey={editingKey}
+          onClose={() => setEditingKey(null)}
+          onSubmit={handleUpdateKey}
+        />
+      )}
       <ConfirmDialog open={delKeyId !== null} title="删除密钥" message="确定要永久移除这个 API 密钥吗？" onConfirm={handleDelete} onCancel={() => setDelKeyId(null)} danger />
       {probeResult && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setProbeResult(null)}>

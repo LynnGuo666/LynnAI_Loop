@@ -1,6 +1,7 @@
 package repo
 
 import (
+	"errors"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -111,5 +112,45 @@ func TestAPIKeyRepoRecordSuccessClearsFailures(t *testing.T) {
 	}
 	if got.LastUsedAt == nil {
 		t.Fatalf("LastUsedAt is nil")
+	}
+}
+
+func TestAPIKeyRepoRejectsDuplicateKeyOnCreateAndUpdate(t *testing.T) {
+	keyRepo := openTestKeyRepo(t)
+	first := &models.APIKey{
+		ChannelID:       1,
+		KeyValue:        "sk-duplicate",
+		Alias:           "first",
+		IsActive:        true,
+		ProbeBackoffMin: 60,
+	}
+	if err := keyRepo.Create(first); err != nil {
+		t.Fatalf("create first key: %v", err)
+	}
+
+	duplicate := &models.APIKey{
+		ChannelID:       1,
+		KeyValue:        " sk-duplicate ",
+		Alias:           "duplicate",
+		IsActive:        true,
+		ProbeBackoffMin: 60,
+	}
+	if err := keyRepo.Create(duplicate); !errors.Is(err, ErrDuplicateAPIKey) {
+		t.Fatalf("Create duplicate error = %v, want ErrDuplicateAPIKey", err)
+	}
+
+	second := &models.APIKey{
+		ChannelID:       1,
+		KeyValue:        "sk-second",
+		Alias:           "second",
+		IsActive:        true,
+		ProbeBackoffMin: 60,
+	}
+	if err := keyRepo.Create(second); err != nil {
+		t.Fatalf("create second key: %v", err)
+	}
+	second.KeyValue = "sk-duplicate"
+	if err := keyRepo.Update(second); !errors.Is(err, ErrDuplicateAPIKey) {
+		t.Fatalf("Update duplicate error = %v, want ErrDuplicateAPIKey", err)
 	}
 }

@@ -2,11 +2,14 @@ package httpserver
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"loop/internal/models"
+	"loop/internal/repo"
 )
 
 func (h *Handlers) ListKeys(w http.ResponseWriter, r *http.Request) {
@@ -43,6 +46,8 @@ func (h *Handlers) CreateKey(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "invalid request body")
 		return
 	}
+	k.KeyValue = strings.TrimSpace(k.KeyValue)
+	k.Alias = strings.TrimSpace(k.Alias)
 	if k.KeyValue == "" {
 		writeError(w, 400, "key_value is required")
 		return
@@ -51,6 +56,10 @@ func (h *Handlers) CreateKey(w http.ResponseWriter, r *http.Request) {
 	k.IsActive = true
 	k.ProbeBackoffMin = 60
 	if err := h.keyRepo.Create(&k); err != nil {
+		if errors.Is(err, repo.ErrDuplicateAPIKey) {
+			writeError(w, http.StatusConflict, "api key already exists")
+			return
+		}
 		writeError(w, 500, "failed to create key: "+err.Error())
 		return
 	}
@@ -82,18 +91,29 @@ func (h *Handlers) UpdateKey(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "key not found")
 		return
 	}
-	var input models.APIKey
+	var input struct {
+		Alias    *string `json:"alias"`
+		KeyValue *string `json:"key_value"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		writeError(w, 400, "invalid request body")
 		return
 	}
-	if input.Alias != "" {
-		k.Alias = input.Alias
+	if input.Alias != nil {
+		k.Alias = strings.TrimSpace(*input.Alias)
 	}
-	if input.KeyValue != "" {
-		k.KeyValue = input.KeyValue
+	if input.KeyValue != nil {
+		k.KeyValue = strings.TrimSpace(*input.KeyValue)
+		if k.KeyValue == "" {
+			writeError(w, 400, "key_value is required")
+			return
+		}
 	}
 	if err := h.keyRepo.Update(k); err != nil {
+		if errors.Is(err, repo.ErrDuplicateAPIKey) {
+			writeError(w, http.StatusConflict, "api key already exists")
+			return
+		}
 		writeError(w, 500, "failed to update key")
 		return
 	}
