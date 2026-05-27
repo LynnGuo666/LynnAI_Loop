@@ -1,0 +1,19 @@
+@import "tailwindcss";
+@import "@heroui/theme";
+
+:root {
+  --loop-primary: oklch(0.65 0.24 265);
+  --loop-bg: oklch(0.14 0.01 265);
+  --loop-card: oklch(0.18 0.01 265);
+  --loop-border: oklch(0.25 0.01 265);
+  --loop-text: oklch(0.92 0.01 265);
+  --loop-muted: oklch(0.6 0.02 265);
+}
+
+body {
+  margin: 0;
+  background: var(--loop-bg);
+  color: var(--loop-text);
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}

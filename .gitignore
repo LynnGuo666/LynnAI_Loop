@@ -1,0 +1,27 @@
+# Binaries
+loop
+*.exe
+
+# Database
+*.db
+*.db-wal
+*.db-shm
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Embedded frontend (built by vite)
+backend/internal/httpserver/frontend_dist/
+
+# Go
+backend/vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db

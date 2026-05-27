@@ -1,0 +1,16 @@
+services:
+  loop:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - loop-data:/data
+    environment:
+      - DB_PATH=/data/loop.db
+      - PORT=8080
+      # Set a fixed admin token (optional, auto-generated if empty)
+      # - ADMIN_TOKEN=your-secret-token
+    restart: unless-stopped
+
+volumes:
+  loop-data:
