@@ -1,5 +1,6 @@
 services:
   loop:
+    image: ghcr.io/lynnguo666/lynnai_loop:latest
     build: .
     ports:
       - "8080:8080"

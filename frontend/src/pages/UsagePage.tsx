@@ -41,6 +41,7 @@ export function UsagePage() {
   }, [page, filters]);
 
   const channelMap = new Map(channels.map((c) => [c.id, c.name]));
+  const keyMap = new Map(keys.map((k) => [k.id, k.alias || `${k.key_value.slice(0, 8)}...`]));
 
   const formatTokens = (n: number) => {
     if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -54,6 +55,11 @@ export function UsagePage() {
       key: "channel_id",
       label: "渠道",
       render: (l: UsageLog) => channelMap.get(l.channel_id) || `#${l.channel_id}`,
+    },
+    {
+      key: "api_key_id",
+      label: "Key",
+      render: (l: UsageLog) => keyMap.get(l.api_key_id) || `#${l.api_key_id}`,
     },
     { key: "model", label: "模型" },
     {
