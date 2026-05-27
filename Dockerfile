@@ -1,19 +1,18 @@
 # Stage 1: Build frontend
 FROM node:22-alpine AS frontend
-WORKDIR /app/frontend
-COPY frontend/package.json frontend/package-lock.json* ./
-RUN npm install
-COPY frontend/ ./
-RUN npm run build
+WORKDIR /app
+COPY frontend/ ./frontend/
+RUN cd frontend && npm ci && npm run build
+# Vite outputs to ../backend/internal/httpserver/frontend_dist relative to frontend/
 
 # Stage 2: Build backend (with embedded frontend)
 FROM golang:1.23-alpine AS backend
 WORKDIR /app
-COPY backend/go.mod backend/go.sum ./
-RUN go mod download
-COPY backend/ ./
-COPY --from=frontend /app/backend/internal/httpserver/frontend_dist ./internal/httpserver/frontend_dist
-RUN CGO_ENABLED=0 go build -o /loop .
+COPY backend/go.mod backend/go.sum ./backend/
+RUN cd backend && go mod download
+COPY backend/ ./backend/
+COPY --from=frontend /app/backend/internal/httpserver/frontend_dist ./backend/internal/httpserver/frontend_dist
+RUN cd backend && CGO_ENABLED=0 go build -o /loop .
 
 # Stage 3: Final image
 FROM alpine:3.21
