@@ -9,11 +9,29 @@ import type {
   KeyImportItem,
   KeyImportResponse,
 } from "../types";
+import { showToast } from "../components/common/ToastHost";
+import { useAuthStore } from "../stores/auth";
 
 const BASE = "";
+let lastUnauthorizedNoticeAt = 0;
 
 function getToken(): string {
   return localStorage.getItem("loop_token") || "";
+}
+
+function handleUnauthorized() {
+  const now = Date.now();
+  if (now - lastUnauthorizedNoticeAt < 2000) return;
+
+  lastUnauthorizedNoticeAt = now;
+  useAuthStore.getState().logout();
+  showToast({ message: "登录密钥已失效，请重新登录", type: "error" });
+
+  if (window.location.pathname !== "/login") {
+    window.setTimeout(() => {
+      window.location.assign("/login");
+    }, 600);
+  }
 }
 
 async function request<T>(
@@ -27,6 +45,9 @@ async function request<T>(
   };
   const res = await fetch(`${BASE}${path}`, { ...opts, headers });
   if (!res.ok) {
+    if (res.status === 401) {
+      handleUnauthorized();
+    }
     const body = await res.text();
     throw new Error(`${res.status}: ${body}`);
   }
