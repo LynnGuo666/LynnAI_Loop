@@ -8,6 +8,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: {
+      "@heroui/toast": resolve(__dirname, "node_modules/@heroui/toast/dist/index.js"),
+    },
+  },
   build: {
     outDir: resolve(__dirname, "../backend/internal/httpserver/frontend_dist"),
     emptyOutDir: true,

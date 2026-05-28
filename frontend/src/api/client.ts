@@ -9,7 +9,7 @@ import type {
   KeyImportItem,
   KeyImportResponse,
 } from "../types";
-import { showToast } from "../components/common/ToastHost";
+import { addToast } from "@heroui/toast";
 import { useAuthStore } from "../stores/auth";
 
 const BASE = "";
@@ -25,7 +25,13 @@ function handleUnauthorized() {
 
   lastUnauthorizedNoticeAt = now;
   useAuthStore.getState().logout();
-  showToast({ message: "登录密钥已失效，请重新登录", type: "error" });
+  addToast({
+    title: "登录密钥已失效",
+    description: "请重新登录",
+    color: "danger",
+    severity: "danger",
+    timeout: 3000,
+  });
 
   if (window.location.pathname !== "/login") {
     window.setTimeout(() => {

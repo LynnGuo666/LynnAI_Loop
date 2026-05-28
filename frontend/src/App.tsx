@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Agentation } from "agentation";
+import { ToastProvider } from "@heroui/toast";
 import { AppShell } from "./components/layout/AppShell";
 import { ProtectedRoute } from "./hooks/useAuth";
 import { LoginPage } from "./pages/LoginPage";
@@ -9,12 +10,11 @@ import { ChannelDetailPage } from "./pages/ChannelDetailPage";
 import { KeysPage } from "./pages/KeysPage";
 import { UsagePage } from "./pages/UsagePage";
 import { SettingsPage } from "./pages/SettingsPage";
-import { ToastHost } from "./components/common/ToastHost";
 
 export default function App() {
   return (
     <BrowserRouter>
-      <ToastHost />
+      <ToastProvider placement="top-center" maxVisibleToasts={3} />
       {import.meta.env.DEV && <Agentation />}
       <Routes>
         <Route path="/login" element={<LoginPage />} />
