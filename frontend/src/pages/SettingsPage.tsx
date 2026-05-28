@@ -24,8 +24,8 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-xl">
-      <h1 className="text-2xl font-bold">设置</h1>
+    <div className="space-y-4 md:space-y-6 max-w-xl">
+      <h1 className="text-xl md:text-2xl font-bold">设置</h1>
       <div className="space-y-5">
         <SettingToggle
           label="恢复探测"
@@ -54,7 +54,7 @@ export function SettingsPage() {
 
 function SettingToggle({ label, description, value, onChange }: { label: string; description: string; value: boolean; onChange: (v: boolean) => void }) {
   return (
-    <div className="flex items-start justify-between p-4 rounded-xl border border-[var(--loop-border)] bg-[var(--loop-card)]">
+    <div className="flex items-start justify-between gap-3 p-4 rounded-xl border border-[var(--loop-border)] bg-[var(--loop-card)]">
       <div>
         <div className="text-sm font-medium">{label}</div>
         <div className="text-xs text-[var(--loop-muted)] mt-1">{description}</div>

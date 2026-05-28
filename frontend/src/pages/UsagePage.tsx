@@ -111,9 +111,9 @@ export function UsagePage() {
   const totalPages = Math.ceil(total / 20);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">用量</h1>
+        <h1 className="text-xl md:text-2xl font-bold">用量</h1>
         <p className="text-sm text-[var(--loop-muted)] mt-1">这里只统计外部业务请求；手动探测和自动恢复探测不计入用量。</p>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
@@ -126,27 +126,27 @@ export function UsagePage() {
         <StatCard label="成功" value={stats?.success_count ?? 0} color="text-green-400" />
         <StatCard label="失败" value={stats?.failure_count ?? 0} color="text-red-400" />
       </div>
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-2 md:gap-3">
         <select value={filters.channel_id} onChange={(e) => { setFilters({ ...filters, channel_id: e.target.value }); setPage(1); }}
-          className="px-3 py-2 rounded-xl bg-[var(--loop-card)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm">
+          className="flex-1 min-w-[120px] px-3 py-2 rounded-xl bg-[var(--loop-card)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm">
           <option value="">全部渠道</option>
           {channels.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <select value={filters.model} onChange={(e) => { setFilters({ ...filters, model: e.target.value }); setPage(1); }}
-          className="px-3 py-2 rounded-xl bg-[var(--loop-card)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm">
+          className="flex-1 min-w-[120px] px-3 py-2 rounded-xl bg-[var(--loop-card)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm">
           <option value="">全部模型</option>
           {models.map((m) => <option key={m} value={m}>{m}</option>)}
         </select>
         <select value={filters.success} onChange={(e) => { setFilters({ ...filters, success: e.target.value }); setPage(1); }}
-          className="px-3 py-2 rounded-xl bg-[var(--loop-card)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm">
+          className="flex-1 min-w-[100px] px-3 py-2 rounded-xl bg-[var(--loop-card)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm">
           <option value="">全部结果</option>
           <option value="true">成功</option>
           <option value="false">失败</option>
         </select>
         <input type="date" value={filters.start_date} onChange={(e) => { setFilters({ ...filters, start_date: e.target.value }); setPage(1); }}
-          className="px-3 py-2 rounded-xl bg-[var(--loop-card)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm" />
+          className="flex-1 min-w-[130px] px-3 py-2 rounded-xl bg-[var(--loop-card)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm" />
         <input type="date" value={filters.end_date} onChange={(e) => { setFilters({ ...filters, end_date: e.target.value }); setPage(1); }}
-          className="px-3 py-2 rounded-xl bg-[var(--loop-card)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm" />
+          className="flex-1 min-w-[130px] px-3 py-2 rounded-xl bg-[var(--loop-card)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm" />
       </div>
       <DataTable columns={columns} data={logs} empty="暂无用量记录" />
       {totalPages > 1 && (

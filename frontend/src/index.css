@@ -15,4 +15,5 @@ body {
   color: var(--loop-text);
   font-family: "Inter", system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
 }

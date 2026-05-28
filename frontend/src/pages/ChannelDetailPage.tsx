@@ -152,17 +152,17 @@ export function ChannelDetailPage() {
   if (!channel) return <div className="text-[var(--loop-muted)]">加载中...</div>;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">{channel.name}</h1>
-        <p className="text-sm text-[var(--loop-muted)] mt-1">{channel.base_url}</p>
+        <h1 className="text-xl md:text-2xl font-bold">{channel.name}</h1>
+        <p className="text-xs md:text-sm text-[var(--loop-muted)] mt-1 break-all">{channel.base_url}</p>
         {channel.description && <p className="text-sm text-[var(--loop-muted)]">{channel.description}</p>}
       </div>
       <div className="rounded-xl border border-[var(--loop-border)] bg-[var(--loop-card)] p-5 space-y-2">
         <h2 className="text-sm font-medium">调用提示</h2>
         <div className="text-xs text-[var(--loop-muted)] space-y-1">
-          <p>外部调用此渠道：<span className="font-mono text-[var(--loop-text)]">/channel/{channel.id}/v1/messages</span></p>
-          <p>请求必须携带管理员令牌：<span className="font-mono text-[var(--loop-text)]">Authorization: Bearer &lt;adminToken&gt;</span> 或 <span className="font-mono text-[var(--loop-text)]">x-api-key: &lt;adminToken&gt;</span>。</p>
+          <p className="break-all">外部调用此渠道：<span className="font-mono text-[var(--loop-text)]">/channel/{channel.id}/v1/messages</span></p>
+          <p className="break-all">请求必须携带管理员令牌：<span className="font-mono text-[var(--loop-text)]">Authorization: Bearer &lt;adminToken&gt;</span> 或 <span className="font-mono text-[var(--loop-text)]">x-api-key: &lt;adminToken&gt;</span>。</p>
           <p>探测会消耗上游少量请求，但只记录到探测历史，不计入用量统计。</p>
         </div>
       </div>
@@ -171,12 +171,12 @@ export function ChannelDetailPage() {
           <h2 className="text-sm font-medium">探测模型</h2>
           <p className="text-xs text-[var(--loop-muted)] mt-1">用于手动探测和自动恢复探测。端点不支持模型列表时，可以直接手填模型 ID；探测结果不会进入用量页。</p>
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-col sm:flex-row flex-wrap gap-3">
           {modelOptions.length > 0 && (
             <select
               value={modelOptions.includes(probeModel) ? probeModel : ""}
               onChange={(e) => setProbeModel(e.target.value)}
-              className="min-w-64 px-3 py-2 rounded-xl bg-[var(--loop-bg)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm"
+              className="w-full sm:min-w-64 px-3 py-2 rounded-xl bg-[var(--loop-bg)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm"
             >
               <option value="">从模型列表选择</option>
               {modelOptions.map((model) => <option key={model} value={model}>{model}</option>)}
@@ -186,7 +186,7 @@ export function ChannelDetailPage() {
             value={probeModel}
             onChange={(e) => setProbeModel(e.target.value)}
             placeholder="手动填写模型 ID"
-            className="min-w-80 flex-1 px-3 py-2 rounded-xl bg-[var(--loop-bg)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm placeholder:text-[var(--loop-muted)] focus:outline-none focus:border-[var(--loop-primary)]"
+            className="w-full sm:min-w-80 flex-1 px-3 py-2 rounded-xl bg-[var(--loop-bg)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm placeholder:text-[var(--loop-muted)] focus:outline-none focus:border-[var(--loop-primary)]"
           />
           <button onClick={handleLoadModels} disabled={modelLoading} className="px-4 py-2 rounded-xl border border-[var(--loop-border)] text-sm hover:bg-white/5 disabled:opacity-40">
             {modelLoading ? "获取中..." : "获取模型列表"}
@@ -197,21 +197,21 @@ export function ChannelDetailPage() {
         </div>
         {modelMsg && <div className="text-xs text-[var(--loop-muted)]">{modelMsg}</div>}
       </div>
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-3 md:gap-4">
         <StatCard label="密钥总数" value={keys.length} />
         <StatCard label="可用密钥" value={activeKeys} color="text-green-400" />
         <StatCard label="停用密钥" value={keys.length - activeKeys} color="text-red-400" />
       </div>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <h2 className="text-lg font-semibold">API 密钥</h2>
-        <div className="flex gap-3">
-          <button onClick={() => setShowAddKey(true)} className="px-4 py-2 rounded-xl bg-[var(--loop-primary)] text-white text-sm font-medium hover:opacity-90 transition">
+        <div className="flex flex-wrap gap-2 sm:gap-3">
+          <button onClick={() => setShowAddKey(true)} className="px-3 md:px-4 py-2 rounded-xl bg-[var(--loop-primary)] text-white text-sm font-medium hover:opacity-90 transition whitespace-nowrap">
             + 添加密钥
           </button>
-          <button onClick={() => setShowImportKeys(true)} className="px-4 py-2 rounded-xl border border-[var(--loop-border)] text-sm hover:bg-white/5">
+          <button onClick={() => setShowImportKeys(true)} className="px-3 md:px-4 py-2 rounded-xl border border-[var(--loop-border)] text-sm hover:bg-white/5 whitespace-nowrap">
             导入
           </button>
-          <button onClick={handleExportKeys} className="px-4 py-2 rounded-xl border border-[var(--loop-border)] text-sm hover:bg-white/5">
+          <button onClick={handleExportKeys} className="px-3 md:px-4 py-2 rounded-xl border border-[var(--loop-border)] text-sm hover:bg-white/5 whitespace-nowrap">
             导出
           </button>
         </div>
@@ -258,8 +258,8 @@ export function ChannelDetailPage() {
       )}
       <ConfirmDialog open={delKeyId !== null} title="删除密钥" message="这会永久移除该 API 密钥。" onConfirm={handleDeleteKey} onCancel={() => setDelKeyId(null)} danger />
       {probeResult && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setProbeResult(null)}>
-          <div className="bg-[var(--loop-card)] border border-[var(--loop-border)] rounded-2xl p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setProbeResult(null)}>
+          <div className="bg-[var(--loop-card)] border border-[var(--loop-border)] rounded-2xl p-5 md:p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-semibold mb-3">探测结果</h3>
             <div className="space-y-2 text-sm">
               <div>是否成功：<span className={probeResult.success ? "text-green-400" : "text-red-400"}>{probeResult.success ? "是" : "否"}</span></div>

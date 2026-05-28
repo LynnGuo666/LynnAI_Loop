@@ -12,7 +12,7 @@ export function StatCard({ label, value, sub, color }: StatCardProps) {
   return (
     <div className="rounded-xl border border-[var(--loop-border)] bg-[var(--loop-card)] p-5">
       <div className="text-xs text-[var(--loop-muted)] uppercase tracking-wider mb-1">{label}</div>
-      <div className={`text-2xl font-bold ${color || "text-[var(--loop-text)]"}`}>{value}</div>
+      <div className={`text-xl md:text-2xl font-bold ${color || "text-[var(--loop-text)]"}`}>{value}</div>
       {sub && <div className="text-xs text-[var(--loop-muted)] mt-1">{sub}</div>}
     </div>
   );
@@ -38,7 +38,7 @@ export function DataTable<T extends Record<string, any>>({ columns, data, empty 
         <thead>
           <tr className="border-b border-[var(--loop-border)] bg-[var(--loop-card)]">
             {columns.map((c) => (
-              <th key={c.key} className="px-4 py-3 text-left text-xs font-medium text-[var(--loop-muted)] uppercase tracking-wider">
+              <th key={c.key} className="px-3 md:px-4 py-3 text-left text-xs font-medium text-[var(--loop-muted)] uppercase tracking-wider">
                 {c.label}
               </th>
             ))}
@@ -55,7 +55,7 @@ export function DataTable<T extends Record<string, any>>({ columns, data, empty 
             data.map((row, i) => (
               <tr key={i} className="border-b border-[var(--loop-border)] last:border-0 hover:bg-white/[0.02]">
                 {columns.map((c) => (
-                  <td key={c.key} className="px-4 py-3">
+                  <td key={c.key} className="px-3 md:px-4 py-3">
                     {c.render ? c.render(row) : String(row[c.key] ?? "")}
                   </td>
                 ))}
@@ -80,8 +80,8 @@ interface ConfirmDialogProps {
 export function ConfirmDialog({ open, title, message, onConfirm, onCancel, danger }: ConfirmDialogProps) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onCancel}>
-      <div className="bg-[var(--loop-card)] border border-[var(--loop-border)] rounded-2xl p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onCancel}>
+      <div className="bg-[var(--loop-card)] border border-[var(--loop-border)] rounded-2xl p-5 md:p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-semibold mb-2">{title}</h3>
         <p className="text-sm text-[var(--loop-muted)] mb-6">{message}</p>
         <div className="flex justify-end gap-3">
@@ -147,14 +147,14 @@ export function KeyFormModal({ title, channels = [], fixedChannelId, initialKey,
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-[var(--loop-card)] border border-[var(--loop-border)] rounded-2xl p-6 w-full max-w-md space-y-4" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-[var(--loop-card)] border border-[var(--loop-border)] rounded-2xl p-5 md:p-6 w-full max-w-md space-y-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-lg font-semibold">{title}</h2>
         {canChooseChannel && (
           <select
             value={channelId}
             onChange={(e) => setChannelId(e.target.value === "" ? "" : Number(e.target.value))}
-            className="w-full px-4 py-2.5 rounded-xl bg-[var(--loop-bg)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm focus:outline-none focus:border-[var(--loop-primary)]"
+            className="w-full px-3 md:px-4 py-2.5 rounded-xl bg-[var(--loop-bg)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm focus:outline-none focus:border-[var(--loop-primary)]"
           >
             <option value="">选择渠道</option>
             {channels.map((channel) => (
@@ -238,8 +238,8 @@ export function KeyImportModal({ channels = [], fixedChannelId, onClose, onImpor
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-[var(--loop-card)] border border-[var(--loop-border)] rounded-2xl p-6 w-full max-w-xl space-y-4" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-[var(--loop-card)] border border-[var(--loop-border)] rounded-2xl p-5 md:p-6 w-full max-w-xl space-y-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-lg font-semibold">导入 API 密钥</h2>
         {canChooseChannel && (
           <select
@@ -261,7 +261,7 @@ export function KeyImportModal({ channels = [], fixedChannelId, onClose, onImpor
             setResult(null);
           }}
           placeholder={'粘贴导出的 JSON，或每行一个 Key\nsk-ant-...\nsk-ant-...'}
-          className="min-h-52 w-full px-4 py-3 rounded-xl bg-[var(--loop-bg)] border border-[var(--loop-border)] text-[var(--loop-text)] placeholder:text-[var(--loop-muted)] focus:outline-none focus:border-[var(--loop-primary)] font-mono text-xs"
+          className="min-h-36 md:min-h-52 w-full px-3 md:px-4 py-3 rounded-xl bg-[var(--loop-bg)] border border-[var(--loop-border)] text-[var(--loop-text)] placeholder:text-[var(--loop-muted)] focus:outline-none focus:border-[var(--loop-primary)] font-mono text-xs"
         />
         {error && <div className="text-sm text-red-400">{error}</div>}
         {result && (

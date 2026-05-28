@@ -102,27 +102,27 @@ export function KeysPage() {
   const disabledCount = filtered.filter((k) => !k.is_active).length;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">API 密钥</h1>
-        <div className="flex gap-3">
+    <div className="space-y-4 md:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <h1 className="text-xl md:text-2xl font-bold">API 密钥</h1>
+        <div className="flex flex-wrap gap-2 sm:gap-3">
           {disabledCount > 0 && (
-            <button onClick={handleBatchEnable} className="px-4 py-2 rounded-xl bg-green-500/20 text-green-400 text-sm font-medium hover:bg-green-500/30 transition">
+            <button onClick={handleBatchEnable} className="px-3 md:px-4 py-2 rounded-xl bg-green-500/20 text-green-400 text-xs sm:text-sm font-medium hover:bg-green-500/30 transition whitespace-nowrap">
               启用全部停用密钥（{disabledCount}）
             </button>
           )}
-          <button onClick={() => setShowAddKey(true)} className="px-4 py-2 rounded-xl bg-[var(--loop-primary)] text-white text-sm font-medium hover:opacity-90 transition">
+          <button onClick={() => setShowAddKey(true)} className="px-3 md:px-4 py-2 rounded-xl bg-[var(--loop-primary)] text-white text-sm font-medium hover:opacity-90 transition whitespace-nowrap">
             + 添加密钥
           </button>
-          <button onClick={() => setShowImportKeys(true)} className="px-4 py-2 rounded-xl border border-[var(--loop-border)] text-sm hover:bg-white/5">
+          <button onClick={() => setShowImportKeys(true)} className="px-3 md:px-4 py-2 rounded-xl border border-[var(--loop-border)] text-sm hover:bg-white/5 whitespace-nowrap">
             导入
           </button>
-          <button onClick={handleExportKeys} className="px-4 py-2 rounded-xl border border-[var(--loop-border)] text-sm hover:bg-white/5">
+          <button onClick={handleExportKeys} className="px-3 md:px-4 py-2 rounded-xl border border-[var(--loop-border)] text-sm hover:bg-white/5 whitespace-nowrap">
             导出
           </button>
         </div>
       </div>
-      <div className="flex gap-3">
+      <div className="flex flex-wrap gap-2 md:gap-3">
         <select
           value={filterChannel}
           onChange={(e) => setFilterChannel(e.target.value === "" ? "" : Number(e.target.value))}
@@ -167,8 +167,8 @@ export function KeysPage() {
       )}
       <ConfirmDialog open={delKeyId !== null} title="删除密钥" message="确定要永久移除这个 API 密钥吗？" onConfirm={handleDelete} onCancel={() => setDelKeyId(null)} danger />
       {probeResult && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setProbeResult(null)}>
-          <div className="bg-[var(--loop-card)] border border-[var(--loop-border)] rounded-2xl p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setProbeResult(null)}>
+          <div className="bg-[var(--loop-card)] border border-[var(--loop-border)] rounded-2xl p-5 md:p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-semibold mb-3">探测结果</h3>
             <div className="space-y-2 text-sm">
               <div>是否成功：<span className={probeResult.success ? "text-green-400" : "text-red-400"}>{probeResult.success ? "是" : "否"}</span></div>

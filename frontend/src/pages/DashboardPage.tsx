@@ -27,8 +27,8 @@ export function DashboardPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold">仪表盘</h1>
+    <div className="space-y-4 md:space-y-6">
+      <h1 className="text-xl md:text-2xl font-bold">仪表盘</h1>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <StatCard label="渠道数" value={channels.length} />
         <StatCard label="密钥总数" value={keys.length} />
@@ -40,7 +40,7 @@ export function DashboardPage() {
       <div className="rounded-xl border border-[var(--loop-border)] bg-[var(--loop-card)] p-6">
         <h2 className="text-sm font-medium text-[var(--loop-muted)] mb-4">近 7 天用量</h2>
         {timeseries.length > 0 ? (
-          <ResponsiveContainer width="100%" height={280}>
+          <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={timeseries}>
               <defs>
                 <linearGradient id="inputGrad" x1="0" y1="0" x2="0" y2="1">
