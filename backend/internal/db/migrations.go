@@ -1,5 +1,12 @@
 package db
 
+import (
+	"database/sql"
+	"fmt"
+	"log"
+	"strings"
+)
+
 const createTablesSQL = `
 CREATE TABLE IF NOT EXISTS channels (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -73,5 +80,59 @@ CREATE INDEX IF NOT EXISTS idx_api_keys_active ON api_keys(is_active);
 CREATE INDEX IF NOT EXISTS idx_usage_logs_channel ON usage_logs(channel_id);
 CREATE INDEX IF NOT EXISTS idx_usage_logs_created ON usage_logs(created_at);
 CREATE INDEX IF NOT EXISTS idx_key_probes_key ON key_probes(api_key_id);
-CREATE INDEX IF NOT EXISTS idx_usage_logs_status ON usage_logs(status);
 `
+
+type migration struct {
+	Version int
+	SQL     string
+}
+
+var migrations = []migration{
+	{Version: 1, SQL: "ALTER TABLE channels ADD COLUMN probe_model TEXT NOT NULL DEFAULT ''"},
+	{Version: 2, SQL: "ALTER TABLE usage_logs ADD COLUMN first_token_ms INTEGER NOT NULL DEFAULT 0"},
+	{Version: 3, SQL: "ALTER TABLE usage_logs ADD COLUMN output_tokens_per_sec REAL NOT NULL DEFAULT 0"},
+	{Version: 4, SQL: "ALTER TABLE usage_logs ADD COLUMN status TEXT NOT NULL DEFAULT 'success'"},
+	{Version: 5, SQL: "CREATE INDEX IF NOT EXISTS idx_usage_logs_status ON usage_logs(status)"},
+}
+
+func runMigrations(db *sql.DB) error {
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
+		version INTEGER PRIMARY KEY,
+		applied_at DATETIME NOT NULL DEFAULT (datetime('now'))
+	)`); err != nil {
+		return fmt.Errorf("create schema_migrations: %w", err)
+	}
+
+	var currentVersion int
+	err := db.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&currentVersion)
+	if err != nil {
+		return fmt.Errorf("read migration version: %w", err)
+	}
+
+	for _, m := range migrations {
+		if m.Version <= currentVersion {
+			continue
+		}
+		log.Printf("applying migration %d...", m.Version)
+		if _, err := db.Exec(m.SQL); err != nil {
+			// On a fresh database, createTablesSQL already includes these columns/indexes.
+			// "duplicate column" errors are expected and can be safely ignored.
+			if isDuplicateError(err) {
+				log.Printf("migration %d: already applied (skipped)", m.Version)
+			} else {
+				return fmt.Errorf("migration %d: %w", m.Version, err)
+			}
+		}
+		if _, err := db.Exec("INSERT INTO schema_migrations (version) VALUES (?)", m.Version); err != nil {
+			return fmt.Errorf("record migration %d: %w", m.Version, err)
+		}
+	}
+
+	return nil
+}
+
+func isDuplicateError(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "duplicate column") ||
+		strings.Contains(msg, "already exists")
+}

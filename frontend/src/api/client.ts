@@ -146,4 +146,4 @@ export const updateSettings = (data: Record<string, string>) =>
   request<Record<string, string>>("/api/settings", { method: "PUT", body: JSON.stringify(data) });
 
 // Health
-export const healthz = () => request<{ status: string }>("/api/healthz");
+export const healthz = () => request<{ status: string; version: string }>("/api/healthz");

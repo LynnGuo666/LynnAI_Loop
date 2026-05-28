@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"loop/internal/config"
+	"loop/internal/version"
 )
 
 type SettingsHandlers struct {
@@ -58,5 +59,5 @@ func (sh *SettingsHandlers) UpdateSettings(w http.ResponseWriter, r *http.Reques
 }
 
 func (sh *SettingsHandlers) Healthz(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, 200, map[string]string{"status": "ok"})
+	writeJSON(w, 200, map[string]string{"status": "ok", "version": version.Version})
 }

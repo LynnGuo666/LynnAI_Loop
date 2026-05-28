@@ -7,12 +7,13 @@ RUN cd frontend && npm ci && npm run build
 
 # Stage 2: Build backend (with embedded frontend)
 FROM golang:1.23-alpine AS backend
+ARG VERSION=dev
 WORKDIR /app
 COPY backend/go.mod backend/go.sum ./backend/
 RUN cd backend && go mod download
 COPY backend/ ./backend/
 COPY --from=frontend /app/backend/internal/httpserver/frontend_dist ./backend/internal/httpserver/frontend_dist
-RUN cd backend && CGO_ENABLED=0 go build -o /loop .
+RUN cd backend && CGO_ENABLED=0 go build -ldflags "-X loop/internal/version.Version=${VERSION}" -o /loop .
 
 # Stage 3: Final image
 FROM alpine:3.21

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuthStore } from "../../stores/auth";
 import { AnimatePresence, motion } from "framer-motion";
+import { healthz } from "../../api/client";
 
 const links = [
   { to: "/", label: "仪表盘" },
@@ -45,6 +46,10 @@ function SidebarContent({
   toggleTheme: () => void;
 }) {
   const logout = useAuthStore((s) => s.logout);
+  const [appVersion, setAppVersion] = useState<string>("");
+  useEffect(() => {
+    healthz().then((r) => setAppVersion(r.version)).catch(() => {});
+  }, []);
   return (
     <>
       <div className="flex items-center justify-between px-5 py-5">
@@ -58,6 +63,9 @@ function SidebarContent({
       >
         退出登录
       </button>
+      {appVersion && (
+        <div className="px-5 pb-3 text-xs text-[var(--loop-muted)] opacity-60">v{appVersion}</div>
+      )}
     </>
   );
 }
