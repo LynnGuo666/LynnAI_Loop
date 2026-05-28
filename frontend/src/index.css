@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@config "../tailwind.config.js";
+@custom-variant dark (&:is(.dark *));
 
 :root {
   --loop-primary: oklch(0.65 0.24 265);

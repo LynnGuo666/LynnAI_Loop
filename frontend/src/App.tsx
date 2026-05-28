@@ -1,5 +1,6 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { Agentation } from "agentation";
+import { HeroUIProvider } from "@heroui/react";
 import { ToastProvider } from "@heroui/toast";
 import { AppShell } from "./components/layout/AppShell";
 import { ProtectedRoute } from "./hooks/useAuth";
@@ -11,9 +12,10 @@ import { KeysPage } from "./pages/KeysPage";
 import { UsagePage } from "./pages/UsagePage";
 import { SettingsPage } from "./pages/SettingsPage";
 
-export default function App() {
+function AppInner() {
+  const navigate = useNavigate();
   return (
-    <BrowserRouter>
+    <HeroUIProvider navigate={navigate} locale="zh-CN">
       <ToastProvider placement="top-center" maxVisibleToasts={3} />
       {import.meta.env.DEV && <Agentation />}
       <Routes>
@@ -33,6 +35,14 @@ export default function App() {
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Routes>
+    </HeroUIProvider>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppInner />
     </BrowserRouter>
   );
 }
