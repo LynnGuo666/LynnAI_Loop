@@ -6,6 +6,7 @@ import App from "./App";
 const theme = localStorage.getItem("loop_theme");
 if (theme === "light" || theme === "dark") {
   document.documentElement.dataset.theme = theme;
+  document.documentElement.classList.add(theme);
 }
 
 createRoot(document.getElementById("root")!).render(

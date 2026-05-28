@@ -2,6 +2,17 @@ import { useEffect, useState } from "react";
 import { listAllKeys, enableKey, probeKey, listChannels, deleteKey, createKey, updateKey, exportKeys, importKeys } from "../api/client";
 import { DataTable, ConfirmDialog, KeyFormModal, KeyImportModal } from "../components/common";
 import type { APIKey, Channel, KeyImportItem, KeyProbe } from "../types";
+import {
+  Button,
+  Chip,
+  Select,
+  SelectItem,
+  Modal,
+  ModalContent,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+} from "@heroui/react";
 
 export function KeysPage() {
   const [keys, setKeys] = useState<APIKey[]>([]);
@@ -72,15 +83,15 @@ export function KeysPage() {
     {
       key: "key_value",
       label: "密钥",
-      render: (k: APIKey) => <span className="font-mono text-xs text-[var(--loop-muted)]">{maskKey(k.key_value)}</span>,
+      render: (k: APIKey) => <span className="font-mono text-xs text-default-500">{maskKey(k.key_value)}</span>,
     },
     {
       key: "is_active",
       label: "状态",
       render: (k: APIKey) => (
-        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${k.is_active ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>
+        <Chip size="sm" variant="flat" color={k.is_active ? "success" : "danger"}>
           {k.is_active ? "启用" : "停用"}
-        </span>
+        </Chip>
       ),
     },
     { key: "consecutive_failures", label: "连续失败" },
@@ -89,11 +100,11 @@ export function KeysPage() {
       key: "actions",
       label: "",
       render: (k: APIKey) => (
-        <div className="flex gap-2 text-xs">
-          {!k.is_active && <button onClick={() => handleEnable(k.id)} className="text-green-400 hover:text-green-300">启用</button>}
-          <button onClick={() => setEditingKey(k)} className="text-[var(--loop-primary)] hover:opacity-80">编辑</button>
-          <button onClick={() => handleProbe(k.id)} className="text-blue-400 hover:text-blue-300">探测</button>
-          <button onClick={() => setDelKeyId(k.id)} className="text-red-400 hover:text-red-300">删除</button>
+        <div className="flex gap-1">
+          {!k.is_active && <Button size="sm" variant="light" color="success" onPress={() => handleEnable(k.id)}>启用</Button>}
+          <Button size="sm" variant="light" color="primary" onPress={() => setEditingKey(k)}>编辑</Button>
+          <Button size="sm" variant="light" onPress={() => handleProbe(k.id)}>探测</Button>
+          <Button size="sm" variant="light" color="danger" onPress={() => setDelKeyId(k.id)}>删除</Button>
         </div>
       ),
     },
@@ -107,39 +118,50 @@ export function KeysPage() {
         <h1 className="text-xl md:text-2xl font-bold">API 密钥</h1>
         <div className="flex flex-wrap gap-2 sm:gap-3">
           {disabledCount > 0 && (
-            <button onClick={handleBatchEnable} className="px-3 md:px-4 py-2 rounded-xl bg-green-500/20 text-green-400 text-xs sm:text-sm font-medium hover:bg-green-500/30 transition whitespace-nowrap">
+            <Button color="success" variant="flat" size="sm" onPress={handleBatchEnable}>
               启用全部停用密钥（{disabledCount}）
-            </button>
+            </Button>
           )}
-          <button onClick={() => setShowAddKey(true)} className="px-3 md:px-4 py-2 rounded-xl bg-[var(--loop-primary)] text-white text-sm font-medium hover:opacity-90 transition whitespace-nowrap">
+          <Button color="primary" onPress={() => setShowAddKey(true)}>
             + 添加密钥
-          </button>
-          <button onClick={() => setShowImportKeys(true)} className="px-3 md:px-4 py-2 rounded-xl border border-[var(--loop-border)] text-sm hover:bg-white/5 whitespace-nowrap">
+          </Button>
+          <Button variant="bordered" onPress={() => setShowImportKeys(true)}>
             导入
-          </button>
-          <button onClick={handleExportKeys} className="px-3 md:px-4 py-2 rounded-xl border border-[var(--loop-border)] text-sm hover:bg-white/5 whitespace-nowrap">
+          </Button>
+          <Button variant="bordered" onPress={handleExportKeys}>
             导出
-          </button>
+          </Button>
         </div>
       </div>
       <div className="flex flex-wrap gap-2 md:gap-3">
-        <select
-          value={filterChannel}
-          onChange={(e) => setFilterChannel(e.target.value === "" ? "" : Number(e.target.value))}
-          className="px-3 py-2 rounded-xl bg-[var(--loop-card)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm"
+        <Select
+          label="渠道"
+          placeholder="全部渠道"
+          selectedKeys={filterChannel !== "" ? new Set([String(filterChannel)]) : new Set()}
+          onSelectionChange={(keys) => {
+            const key = Array.from(keys)[0];
+            setFilterChannel(key ? Number(key) : "");
+          }}
+          className="min-w-[140px]"
         >
-          <option value="">全部渠道</option>
-          {channels.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value as "all" | "active" | "disabled")}
-          className="px-3 py-2 rounded-xl bg-[var(--loop-card)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm"
+          {channels.map((c) => (
+            <SelectItem key={String(c.id)}>{c.name}</SelectItem>
+          ))}
+        </Select>
+        <Select
+          label="状态"
+          placeholder="全部状态"
+          selectedKeys={filterStatus !== "all" ? new Set([filterStatus]) : new Set()}
+          onSelectionChange={(keys) => {
+            const key = Array.from(keys)[0] as string;
+            setFilterStatus((key as "all" | "active" | "disabled") || "all");
+          }}
+          className="min-w-[120px]"
         >
-          <option value="all">全部状态</option>
-          <option value="active">启用</option>
-          <option value="disabled">停用</option>
-        </select>
+          <SelectItem key="all">全部状态</SelectItem>
+          <SelectItem key="active">启用</SelectItem>
+          <SelectItem key="disabled">停用</SelectItem>
+        </Select>
       </div>
       <DataTable columns={columns} data={filtered} empty="未找到密钥" />
       {showAddKey && (
@@ -166,20 +188,22 @@ export function KeysPage() {
         />
       )}
       <ConfirmDialog open={delKeyId !== null} title="删除密钥" message="确定要永久移除这个 API 密钥吗？" onConfirm={handleDelete} onCancel={() => setDelKeyId(null)} danger />
-      {probeResult && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setProbeResult(null)}>
-          <div className="bg-[var(--loop-card)] border border-[var(--loop-border)] rounded-2xl p-5 md:p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold mb-3">探测结果</h3>
+      <Modal isOpen={probeResult !== null} onOpenChange={(isOpen) => !isOpen && setProbeResult(null)} size="sm">
+        <ModalContent>
+          <ModalHeader>探测结果</ModalHeader>
+          <ModalBody>
             <div className="space-y-2 text-sm">
-              <div>是否成功：<span className={probeResult.success ? "text-green-400" : "text-red-400"}>{probeResult.success ? "是" : "否"}</span></div>
-              <div>状态码：{probeResult.status_code}</div>
-              <div>延迟：{probeResult.latency_ms}ms</div>
-              {probeResult.error_msg && <div className="text-red-400">错误：{probeResult.error_msg}</div>}
+              <div>是否成功：<Chip size="sm" variant="flat" color={probeResult?.success ? "success" : "danger"}>{probeResult?.success ? "是" : "否"}</Chip></div>
+              <div>状态码：{probeResult?.status_code}</div>
+              <div>延迟：{probeResult?.latency_ms}ms</div>
+              {probeResult?.error_msg && <div className="text-danger">错误：{probeResult.error_msg}</div>}
             </div>
-            <button onClick={() => setProbeResult(null)} className="mt-4 px-4 py-2 text-sm rounded-lg border border-[var(--loop-border)] hover:bg-white/5">关闭</button>
-          </div>
-        </div>
-      )}
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="flat" onPress={() => setProbeResult(null)}>关闭</Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </div>
   );
 }

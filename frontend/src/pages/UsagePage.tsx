@@ -1,6 +1,23 @@
-import { Fragment, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { listUsage, getUsageModels, listChannels, listAllKeys } from "../api/client";
 import type { UsageLog, Channel, APIKey } from "../types";
+import {
+  Card,
+  CardBody,
+  Button,
+  Chip,
+  Spinner,
+  Select,
+  SelectItem,
+  Input,
+  Table,
+  TableHeader,
+  TableColumn,
+  TableBody,
+  TableRow,
+  TableCell,
+  Pagination,
+} from "@heroui/react";
 
 export function UsagePage() {
   const [logs, setLogs] = useState<UsageLog[]>([]);
@@ -53,126 +70,166 @@ export function UsagePage() {
 
   const totalPages = Math.ceil(total / 20);
 
+  const tableColumns = [
+    { key: "id", label: "ID" },
+    { key: "channel_id", label: "渠道" },
+    { key: "api_key_id", label: "Key" },
+    { key: "model", label: "模型" },
+    { key: "status", label: "状态" },
+    { key: "latency_ms", label: "延迟" },
+    { key: "performance", label: "性能" },
+    { key: "created_at", label: "时间" },
+    { key: "expand", label: "" },
+  ];
+
   return (
     <div className="space-y-4 md:space-y-6">
       <div>
         <h1 className="text-xl md:text-2xl font-bold">用量</h1>
-        <p className="text-sm text-[var(--loop-muted)] mt-1">统计所有请求的 API 用量，包括代理请求和探测请求。</p>
+        <p className="text-sm text-default-500 mt-1">统计所有请求的 API 用量，包括代理请求和探测请求。</p>
       </div>
       <div className="flex flex-wrap gap-2 md:gap-3">
-        <select value={filters.channel_id} onChange={(e) => { setFilters({ ...filters, channel_id: e.target.value }); setPage(1); }}
-          className="flex-1 min-w-[120px] px-3 py-2 rounded-xl bg-[var(--loop-card)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm">
-          <option value="">全部渠道</option>
-          {channels.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-        <select value={filters.model} onChange={(e) => { setFilters({ ...filters, model: e.target.value }); setPage(1); }}
-          className="flex-1 min-w-[120px] px-3 py-2 rounded-xl bg-[var(--loop-card)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm">
-          <option value="">全部模型</option>
-          {models.map((m) => <option key={m} value={m}>{m}</option>)}
-        </select>
-        <select value={filters.status} onChange={(e) => { setFilters({ ...filters, status: e.target.value }); setPage(1); }}
-          className="flex-1 min-w-[100px] px-3 py-2 rounded-xl bg-[var(--loop-card)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm">
-          <option value="">全部状态</option>
-          <option value="pending">进行中</option>
-          <option value="success">成功</option>
-          <option value="failed">失败</option>
-        </select>
-        <select value={filters.success} onChange={(e) => { setFilters({ ...filters, success: e.target.value }); setPage(1); }}
-          className="flex-1 min-w-[100px] px-3 py-2 rounded-xl bg-[var(--loop-card)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm">
-          <option value="">全部结果</option>
-          <option value="true">成功</option>
-          <option value="false">失败</option>
-        </select>
-        <input type="date" value={filters.start_date} onChange={(e) => { setFilters({ ...filters, start_date: e.target.value }); setPage(1); }}
-          className="flex-1 min-w-[130px] px-3 py-2 rounded-xl bg-[var(--loop-card)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm" />
-        <input type="date" value={filters.end_date} onChange={(e) => { setFilters({ ...filters, end_date: e.target.value }); setPage(1); }}
-          className="flex-1 min-w-[130px] px-3 py-2 rounded-xl bg-[var(--loop-card)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm" />
+        <Select
+          label="渠道"
+          placeholder="全部渠道"
+          selectedKeys={filters.channel_id ? new Set([filters.channel_id]) : new Set()}
+          onSelectionChange={(keys) => {
+            const key = Array.from(keys)[0] as string;
+            setFilters({ ...filters, channel_id: key || "" });
+            setPage(1);
+          }}
+          className="min-w-[120px] flex-1"
+        >
+          {channels.map((c) => <SelectItem key={String(c.id)}>{c.name}</SelectItem>)}
+        </Select>
+        <Select
+          label="模型"
+          placeholder="全部模型"
+          selectedKeys={filters.model ? new Set([filters.model]) : new Set()}
+          onSelectionChange={(keys) => {
+            const key = Array.from(keys)[0] as string;
+            setFilters({ ...filters, model: key || "" });
+            setPage(1);
+          }}
+          className="min-w-[120px] flex-1"
+        >
+          {models.map((m) => <SelectItem key={m}>{m}</SelectItem>)}
+        </Select>
+        <Select
+          label="状态"
+          placeholder="全部状态"
+          selectedKeys={filters.status ? new Set([filters.status]) : new Set()}
+          onSelectionChange={(keys) => {
+            const key = Array.from(keys)[0] as string;
+            setFilters({ ...filters, status: key || "" });
+            setPage(1);
+          }}
+          className="min-w-[100px] flex-1"
+        >
+          <SelectItem key="pending">进行中</SelectItem>
+          <SelectItem key="success">成功</SelectItem>
+          <SelectItem key="failed">失败</SelectItem>
+        </Select>
+        <Select
+          label="结果"
+          placeholder="全部结果"
+          selectedKeys={filters.success ? new Set([filters.success]) : new Set()}
+          onSelectionChange={(keys) => {
+            const key = Array.from(keys)[0] as string;
+            setFilters({ ...filters, success: key || "" });
+            setPage(1);
+          }}
+          className="min-w-[100px] flex-1"
+        >
+          <SelectItem key="true">成功</SelectItem>
+          <SelectItem key="false">失败</SelectItem>
+        </Select>
+        <Input
+          type="date"
+          label="开始日期"
+          value={filters.start_date}
+          onValueChange={(v) => { setFilters({ ...filters, start_date: v }); setPage(1); }}
+          className="min-w-[130px] flex-1"
+        />
+        <Input
+          type="date"
+          label="结束日期"
+          value={filters.end_date}
+          onValueChange={(v) => { setFilters({ ...filters, end_date: v }); setPage(1); }}
+          className="min-w-[130px] flex-1"
+        />
       </div>
-      <div className="overflow-x-auto rounded-xl border border-[var(--loop-border)]">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-[var(--loop-border)] bg-[var(--loop-card)]">
-              <th className="px-3 md:px-4 py-3 text-left text-xs font-medium text-[var(--loop-muted)] uppercase tracking-wider">ID</th>
-              <th className="px-3 md:px-4 py-3 text-left text-xs font-medium text-[var(--loop-muted)] uppercase tracking-wider">渠道</th>
-              <th className="px-3 md:px-4 py-3 text-left text-xs font-medium text-[var(--loop-muted)] uppercase tracking-wider">Key</th>
-              <th className="px-3 md:px-4 py-3 text-left text-xs font-medium text-[var(--loop-muted)] uppercase tracking-wider">模型</th>
-              <th className="px-3 md:px-4 py-3 text-left text-xs font-medium text-[var(--loop-muted)] uppercase tracking-wider">状态</th>
-              <th className="px-3 md:px-4 py-3 text-left text-xs font-medium text-[var(--loop-muted)] uppercase tracking-wider">延迟</th>
-              <th className="px-3 md:px-4 py-3 text-left text-xs font-medium text-[var(--loop-muted)] uppercase tracking-wider">性能</th>
-              <th className="px-3 md:px-4 py-3 text-left text-xs font-medium text-[var(--loop-muted)] uppercase tracking-wider">时间</th>
-              <th className="px-3 md:px-4 py-3 text-left text-xs font-medium text-[var(--loop-muted)] uppercase tracking-wider"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {logs.length === 0 ? (
-              <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-[var(--loop-muted)]">暂无用量记录</td>
-              </tr>
-            ) : (
-              logs.map((log) => {
-                const expanded = expandedId === log.id;
-                const isPending = log.status === "pending";
-                return (
-                  <Fragment key={log.id}>
-                    <tr key={log.id} className="border-b border-[var(--loop-border)] hover:bg-white/[0.02]">
-                      <td className="px-3 md:px-4 py-3">{log.id}</td>
-                      <td className="px-3 md:px-4 py-3">{channelMap.get(log.channel_id) || `#${log.channel_id}`}</td>
-                      <td className="px-3 md:px-4 py-3">{keyMap.get(log.api_key_id) || `#${log.api_key_id}`}</td>
-                      <td className="px-3 md:px-4 py-3">{log.model || "-"}</td>
-                      <td className="px-3 md:px-4 py-3">
-                        <StatusBadge status={log.status} />
-                      </td>
-                      <td className="px-3 md:px-4 py-3">{isPending ? "-" : `${log.latency_ms}ms`}</td>
-                      <td className="px-3 md:px-4 py-3">
-                        {isPending ? (
-                          <span className="text-[var(--loop-muted)]">-</span>
-                        ) : (
-                          <>
-                            <div>{formatMs(log.first_token_ms)}</div>
-                            <div className="text-xs text-[var(--loop-muted)]">{formatSpeed(log.output_tokens_per_sec)}</div>
-                          </>
-                        )}
-                      </td>
-                      <td className="px-3 md:px-4 py-3 whitespace-nowrap">{new Date(log.created_at).toLocaleString()}</td>
-                      <td className="px-3 md:px-4 py-3 text-right">
-                        <button
-                          onClick={() => setExpandedId(expanded ? null : log.id)}
-                          className="rounded-lg border border-[var(--loop-border)] px-2.5 py-1 text-xs hover:bg-white/5"
-                        >
-                          {expanded ? "收起" : "详情"}
-                        </button>
-                      </td>
-                    </tr>
-                    {expanded && (
-                      <tr key={`${log.id}-details`} className="border-b border-[var(--loop-border)] bg-white/[0.02]">
-                        <td colSpan={9} className="px-3 md:px-4 py-4">
-                          <div className="grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
-                            <DetailItem label="输入令牌" value={isPending ? "-" : formatTokens(log.input_tokens)} />
-                            <DetailItem label="输出令牌" value={isPending ? "-" : formatTokens(log.output_tokens)} />
-                            <DetailItem label="缓存写" value={isPending ? "-" : formatTokens(log.cache_creation_tokens)} />
-                            <DetailItem label="缓存读" value={isPending ? "-" : formatTokens(log.cache_read_tokens)} />
-                            <DetailItem label="请求结果" value={isPending ? "进行中" : log.success ? `${log.status_code}` : `错误 ${log.status_code}`} tone={isPending ? undefined : log.success ? "success" : "danger"} />
-                            <DetailItem label="流式" value={isPending ? "-" : log.is_stream ? "是" : "否"} />
-                            <DetailItem label="端点" value={log.endpoint || "-"} />
-                            <DetailItem label="错误信息" value={isPending ? "-" : log.error_message || "-"} tone={!isPending && log.error_message ? "danger" : undefined} />
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+      <Table aria-label="Usage logs table">
+        <TableHeader>
+          {tableColumns.map((c) => (
+            <TableColumn key={c.key}>{c.label}</TableColumn>
+          ))}
+        </TableHeader>
+        <TableBody emptyContent="暂无用量记录">
+          {logs.flatMap((log) => {
+            const expanded = expandedId === log.id;
+            const isPending = log.status === "pending";
+            const mainRow = (
+              <TableRow key={log.id}>
+                <TableCell>{log.id}</TableCell>
+                <TableCell>{channelMap.get(log.channel_id) || `#${log.channel_id}`}</TableCell>
+                <TableCell>{keyMap.get(log.api_key_id) || `#${log.api_key_id}`}</TableCell>
+                <TableCell>{log.model || "-"}</TableCell>
+                <TableCell>
+                  <StatusBadge status={log.status} />
+                </TableCell>
+                <TableCell>{isPending ? "-" : `${log.latency_ms}ms`}</TableCell>
+                <TableCell>
+                  {isPending ? (
+                    <span className="text-default-500">-</span>
+                  ) : (
+                    <>
+                      <div>{formatMs(log.first_token_ms)}</div>
+                      <div className="text-xs text-default-500">{formatSpeed(log.output_tokens_per_sec)}</div>
+                    </>
+                  )}
+                </TableCell>
+                <TableCell>{new Date(log.created_at).toLocaleString()}</TableCell>
+                <TableCell>
+                  <Button
+                    size="sm"
+                    variant="bordered"
+                    onPress={() => setExpandedId(expanded ? null : log.id)}
+                  >
+                    {expanded ? "收起" : "详情"}
+                  </Button>
+                </TableCell>
+              </TableRow>
+            );
+            if (!expanded) return [mainRow];
+            const detailRow = (
+              <TableRow key={`${log.id}-detail`}>
+                <TableCell colSpan={tableColumns.length}>
+                  <div className="grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                    <DetailItem label="输入令牌" value={isPending ? "-" : formatTokens(log.input_tokens)} />
+                    <DetailItem label="输出令牌" value={isPending ? "-" : formatTokens(log.output_tokens)} />
+                    <DetailItem label="缓存写" value={isPending ? "-" : formatTokens(log.cache_creation_tokens)} />
+                    <DetailItem label="缓存读" value={isPending ? "-" : formatTokens(log.cache_read_tokens)} />
+                    <DetailItem label="请求结果" value={isPending ? "进行中" : log.success ? `${log.status_code}` : `错误 ${log.status_code}`} tone={isPending ? undefined : log.success ? "success" : "danger"} />
+                    <DetailItem label="流式" value={isPending ? "-" : log.is_stream ? "是" : "否"} />
+                    <DetailItem label="端点" value={log.endpoint || "-"} />
+                    <DetailItem label="错误信息" value={isPending ? "-" : log.error_message || "-"} tone={!isPending && log.error_message ? "danger" : undefined} />
+                  </div>
+                </TableCell>
+              </TableRow>
+            );
+            return [mainRow, detailRow];
+          })}
+        </TableBody>
+      </Table>
       {totalPages > 1 && (
-        <div className="flex justify-center gap-2">
-          <button onClick={() => setPage(Math.max(1, page - 1))} disabled={page <= 1}
-            className="px-3 py-1.5 rounded-lg border border-[var(--loop-border)] text-sm disabled:opacity-30 hover:bg-white/5">上一页</button>
-          <span className="px-3 py-1.5 text-sm text-[var(--loop-muted)]">第 {page} / {totalPages} 页</span>
-          <button onClick={() => setPage(Math.min(totalPages, page + 1))} disabled={page >= totalPages}
-            className="px-3 py-1.5 rounded-lg border border-[var(--loop-border)] text-sm disabled:opacity-30 hover:bg-white/5">下一页</button>
+        <div className="flex justify-center">
+          <Pagination
+            total={totalPages}
+            page={page}
+            onChange={setPage}
+            showControls
+          />
         </div>
       )}
     </div>
@@ -182,19 +239,16 @@ export function UsagePage() {
 function StatusBadge({ status }: { status: string }) {
   if (status === "pending") {
     return (
-      <span className="inline-flex items-center gap-1.5 text-amber-400">
-        <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-        </svg>
+      <span className="inline-flex items-center gap-1.5 text-warning">
+        <Spinner size="sm" color="warning" />
         <span className="text-xs font-medium">请求中</span>
       </span>
     );
   }
   if (status === "failed") {
-    return <span className="text-xs font-medium text-red-400">失败</span>;
+    return <Chip size="sm" variant="flat" color="danger">失败</Chip>;
   }
-  return <span className="text-xs font-medium text-green-400">成功</span>;
+  return <Chip size="sm" variant="flat" color="success">成功</Chip>;
 }
 
 function DetailItem({
@@ -206,12 +260,14 @@ function DetailItem({
   value: string;
   tone?: "success" | "danger";
 }) {
-  const toneClass = tone === "success" ? "text-green-400" : tone === "danger" ? "text-red-400" : "text-[var(--loop-text)]";
+  const toneClass = tone === "success" ? "text-success" : tone === "danger" ? "text-danger" : "text-foreground";
 
   return (
-    <div className="min-w-0 rounded-lg border border-[var(--loop-border)] bg-[var(--loop-bg)] px-3 py-2">
-      <div className="text-[var(--loop-muted)]">{label}</div>
-      <div className={`mt-1 break-all font-medium ${toneClass}`}>{value}</div>
-    </div>
+    <Card>
+      <CardBody className="px-3 py-2">
+        <div className="text-default-500">{label}</div>
+        <div className={`mt-1 break-all font-medium ${toneClass}`}>{value}</div>
+      </CardBody>
+    </Card>
   );
 }

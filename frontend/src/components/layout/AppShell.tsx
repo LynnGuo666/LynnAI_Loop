@@ -1,7 +1,13 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuthStore } from "../../stores/auth";
-import { AnimatePresence, motion } from "framer-motion";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerBody,
+  Button,
+} from "@heroui/react";
 import { healthz } from "../../api/client";
 
 const links = [
@@ -24,8 +30,8 @@ function NavLinks({ onClick }: { onClick?: () => void }) {
           className={({ isActive }) =>
             `block px-3 py-2 rounded-lg text-sm transition ${
               isActive
-                ? "bg-[var(--loop-primary)]/15 text-[var(--loop-primary)] font-medium"
-                : "text-[var(--loop-muted)] hover:text-[var(--loop-text)] hover:bg-white/5"
+                ? "bg-primary-100 text-primary font-medium"
+                : "text-default-500 hover:text-foreground hover:bg-default-100"
             }`
           }
         >
@@ -53,18 +59,20 @@ function SidebarContent({
   return (
     <>
       <div className="flex items-center justify-between px-5 py-5">
-        <div className="text-lg font-bold tracking-tight text-[var(--loop-primary)]">Loop</div>
+        <div className="text-lg font-bold tracking-tight text-primary">Loop</div>
         <ThemeButton theme={theme} onClick={toggleTheme} />
       </div>
       <NavLinks onClick={onNavigate} />
-      <button
-        onClick={() => { logout(); onNavigate?.(); }}
-        className="m-3 px-3 py-2 text-sm rounded-lg text-[var(--loop-muted)] hover:text-red-400 hover:bg-red-400/10 transition"
+      <Button
+        variant="light"
+        color="danger"
+        onPress={() => { logout(); onNavigate?.(); }}
+        className="m-3 justify-start"
       >
         退出登录
-      </button>
+      </Button>
       {appVersion && (
-        <div className="px-5 pb-3 text-xs text-[var(--loop-muted)] opacity-60">v{appVersion}</div>
+        <div className="px-5 pb-3 text-xs text-default-500 opacity-60">v{appVersion}</div>
       )}
     </>
   );
@@ -77,48 +85,41 @@ export function AppShell() {
   return (
     <div className="flex min-h-screen">
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex w-56 shrink-0 border-r border-[var(--loop-border)] bg-[var(--loop-card)] flex-col h-screen sticky top-0">
+      <aside className="hidden md:flex w-56 shrink-0 border-r border-divider bg-content1 flex-col h-screen sticky top-0">
         <SidebarContent theme={theme} toggleTheme={toggleTheme} />
       </aside>
 
       {/* Mobile drawer */}
-      <AnimatePresence>
-        {drawerOpen && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
-              onClick={() => setDrawerOpen(false)}
+      <Drawer isOpen={drawerOpen} onOpenChange={setDrawerOpen} placement="left" size="xs">
+        <DrawerContent>
+          <DrawerHeader className="border-b border-divider">
+            <span className="text-lg font-bold tracking-tight text-primary">Loop</span>
+          </DrawerHeader>
+          <DrawerBody className="p-0">
+            <SidebarContent
+              theme={theme}
+              toggleTheme={toggleTheme}
+              onNavigate={() => setDrawerOpen(false)}
             />
-            <motion.aside
-              initial={{ x: "-100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "-100%" }}
-              transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="fixed inset-y-0 left-0 z-50 w-64 bg-[var(--loop-card)] border-r border-[var(--loop-border)] flex flex-col md:hidden"
-            >
-              <SidebarContent theme={theme} toggleTheme={toggleTheme} onNavigate={() => setDrawerOpen(false)} />
-            </motion.aside>
-          </>
-        )}
-      </AnimatePresence>
+          </DrawerBody>
+        </DrawerContent>
+      </Drawer>
 
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Mobile top bar */}
-        <header className="md:hidden flex items-center px-4 py-3 border-b border-[var(--loop-border)] bg-[var(--loop-card)] sticky top-0 z-30">
-          <button
-            onClick={() => setDrawerOpen(true)}
-            className="p-2 -ml-2 rounded-lg text-[var(--loop-muted)] hover:text-[var(--loop-text)] hover:bg-white/5 transition"
+        <header className="md:hidden flex items-center px-4 py-3 border-b border-divider bg-content1 sticky top-0 z-30">
+          <Button
+            isIconOnly
+            variant="light"
+            onPress={() => setDrawerOpen(true)}
+            className="text-default-500"
           >
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
               <path d="M3 5h14M3 10h14M3 15h14" />
             </svg>
-          </button>
-          <span className="ml-3 text-base font-bold tracking-tight text-[var(--loop-primary)]">Loop</span>
+          </Button>
+          <span className="ml-3 text-base font-bold tracking-tight text-primary">Loop</span>
           <div className="ml-auto">
             <ThemeButton theme={theme} onClick={toggleTheme} />
           </div>
@@ -144,6 +145,8 @@ function useTheme() {
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
 
   useEffect(() => {
+    document.documentElement.classList.remove("dark", "light");
+    document.documentElement.classList.add(theme);
     document.documentElement.dataset.theme = theme;
     localStorage.setItem("loop_theme", theme);
   }, [theme]);
@@ -158,12 +161,14 @@ function ThemeButton({ theme, onClick }: { theme: Theme; onClick: () => void }) 
   const isDark = theme === "dark";
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
+    <Button
+      isIconOnly
+      variant="bordered"
+      size="sm"
+      onPress={onClick}
       title={isDark ? "切换到浅色模式" : "切换到深色模式"}
       aria-label={isDark ? "切换到浅色模式" : "切换到深色模式"}
-      className="grid h-8 w-8 place-items-center rounded-lg border border-[var(--loop-border)] text-[var(--loop-muted)] hover:bg-[var(--loop-hover)] hover:text-[var(--loop-text)] transition"
+      className="text-default-500"
     >
       {isDark ? (
         <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
@@ -175,6 +180,6 @@ function ThemeButton({ theme, onClick }: { theme: Theme; onClick: () => void }) 
           <path d="M16.5 11.2A6.5 6.5 0 0 1 8.8 3.5 6.8 6.8 0 1 0 16.5 11.2Z" />
         </svg>
       )}
-    </button>
+    </Button>
   );
 }

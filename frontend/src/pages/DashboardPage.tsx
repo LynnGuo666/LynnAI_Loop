@@ -4,6 +4,7 @@ import { listChannels, listAllKeys, getUsageStats, getUsageTimeseries } from "..
 import { StatCard } from "../components/common";
 import type { Channel, APIKey, UsageStats, TimeseriesPoint } from "../types";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { Card, CardBody, Button } from "@heroui/react";
 
 export function DashboardPage() {
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -36,56 +37,60 @@ export function DashboardPage() {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <StatCard label="渠道数" value={channels.length} />
         <StatCard label="密钥总数" value={keys.length} />
-        <StatCard label="可用密钥" value={activeKeys} color="text-green-400" />
-        <StatCard label="停用密钥" value={disabledKeys} color="text-red-400" />
+        <StatCard label="可用密钥" value={activeKeys} color="text-success" />
+        <StatCard label="停用密钥" value={disabledKeys} color="text-danger" />
         <StatCard label="今日请求" value={stats?.total_requests ?? "-"} />
         <StatCard label="令牌总量" value={formatTokens((stats?.total_input_tokens ?? 0) + (stats?.total_output_tokens ?? 0))} />
       </div>
-      <div className="rounded-xl border border-[var(--loop-border)] bg-[var(--loop-card)] p-6">
-        <h2 className="text-sm font-medium text-[var(--loop-muted)] mb-4">近 7 天用量</h2>
-        {hasUsageData ? (
-          <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={timeseries}>
-              <defs>
-                <linearGradient id="inputGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#6366f1" stopOpacity={0.3} />
-                  <stop offset="100%" stopColor="#6366f1" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="outputGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#22d3ee" stopOpacity={0.3} />
-                  <stop offset="100%" stopColor="#22d3ee" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <XAxis dataKey="date" tick={{ fill: "#6b7280", fontSize: 11 }} tickLine={false} axisLine={false} />
-              <YAxis tick={{ fill: "#6b7280", fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={formatTokens} />
-              <Tooltip contentStyle={{ background: "#1e1e2e", border: "1px solid #333", borderRadius: 8, fontSize: 12 }} labelStyle={{ color: "#9ca3af" }} />
-              <Area type="monotone" dataKey="input_tokens" stroke="#6366f1" fill="url(#inputGrad)" strokeWidth={2} name="输入" />
-              <Area type="monotone" dataKey="output_tokens" stroke="#22d3ee" fill="url(#outputGrad)" strokeWidth={2} name="输出" />
-            </AreaChart>
-          </ResponsiveContainer>
-        ) : (
-          <div className="h-64 flex flex-col items-center justify-center gap-4 text-center">
-            <div>
-              <div className="text-sm font-medium text-[var(--loop-text)]">还没有业务请求记录</div>
-              <div className="mt-1 text-xs text-[var(--loop-muted)]">产生用量后，这里会展示近 7 天的令牌趋势。</div>
+      <Card>
+        <CardBody className="p-6">
+          <h2 className="text-sm font-medium text-default-500 mb-4">近 7 天用量</h2>
+          {hasUsageData ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <AreaChart data={timeseries}>
+                <defs>
+                  <linearGradient id="inputGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#6366f1" stopOpacity={0.3} />
+                    <stop offset="100%" stopColor="#6366f1" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="outputGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#22d3ee" stopOpacity={0.3} />
+                    <stop offset="100%" stopColor="#22d3ee" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="date" tick={{ fill: "#6b7280", fontSize: 11 }} tickLine={false} axisLine={false} />
+                <YAxis tick={{ fill: "#6b7280", fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={formatTokens} />
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--heroui-background)",
+                    border: "1px solid var(--heroui-default-200)",
+                    borderRadius: 8,
+                    fontSize: 12,
+                  }}
+                  labelStyle={{ color: "var(--heroui-default-500)" }}
+                />
+                <Area type="monotone" dataKey="input_tokens" stroke="#6366f1" fill="url(#inputGrad)" strokeWidth={2} name="输入" />
+                <Area type="monotone" dataKey="output_tokens" stroke="#22d3ee" fill="url(#outputGrad)" strokeWidth={2} name="输出" />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-64 flex flex-col items-center justify-center gap-4 text-center">
+              <div>
+                <div className="text-sm font-medium text-foreground">还没有业务请求记录</div>
+                <div className="mt-1 text-xs text-default-500">产生用量后，这里会展示近 7 天的令牌趋势。</div>
+              </div>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button as={Link} to="/usage" variant="bordered" size="sm">
+                  查看用量明细
+                </Button>
+                <Button as={Link} to="/channels" color="primary" size="sm">
+                  查看渠道
+                </Button>
+              </div>
             </div>
-            <div className="flex flex-wrap justify-center gap-2">
-              <Link
-                to="/usage"
-                className="rounded-lg border border-[var(--loop-border)] px-3 py-1.5 text-xs text-[var(--loop-text)] hover:bg-white/5"
-              >
-                查看用量明细
-              </Link>
-              <Link
-                to="/channels"
-                className="rounded-lg bg-[var(--loop-primary)] px-3 py-1.5 text-xs text-white hover:opacity-90"
-              >
-                查看渠道
-              </Link>
-            </div>
-          </div>
-        )}
-      </div>
+          )}
+        </CardBody>
+      </Card>
     </div>
   );
 }

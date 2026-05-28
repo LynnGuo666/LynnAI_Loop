@@ -1,4 +1,25 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
+import {
+  Card,
+  CardBody,
+  Table,
+  TableHeader,
+  TableColumn,
+  TableBody,
+  TableRow,
+  TableCell,
+  Modal,
+  ModalContent,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  Input,
+  Select,
+  SelectItem,
+  Textarea,
+  Button,
+} from "@heroui/react";
+import type { ReactNode } from "react";
 import type { APIKey, Channel, KeyImportItem, KeyImportResponse } from "../../types";
 
 interface StatCardProps {
@@ -10,11 +31,13 @@ interface StatCardProps {
 
 export function StatCard({ label, value, sub, color }: StatCardProps) {
   return (
-    <div className="rounded-xl border border-[var(--loop-border)] bg-[var(--loop-card)] p-5">
-      <div className="text-xs text-[var(--loop-muted)] uppercase tracking-wider mb-1">{label}</div>
-      <div className={`text-xl md:text-2xl font-bold ${color || "text-[var(--loop-text)]"}`}>{value}</div>
-      {sub && <div className="text-xs text-[var(--loop-muted)] mt-1">{sub}</div>}
-    </div>
+    <Card>
+      <CardBody className="p-5">
+        <div className="text-xs text-default-500 uppercase tracking-wider mb-1">{label}</div>
+        <div className={`text-xl md:text-2xl font-bold ${color || "text-foreground"}`}>{value}</div>
+        {sub && <div className="text-xs text-default-500 mt-1">{sub}</div>}
+      </CardBody>
+    </Card>
   );
 }
 
@@ -33,38 +56,22 @@ interface DataTableProps<T> {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function DataTable<T extends Record<string, any>>({ columns, data, empty }: DataTableProps<T>) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-[var(--loop-border)]">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-[var(--loop-border)] bg-[var(--loop-card)]">
+    <Table aria-label="Data table">
+      <TableHeader>
+        {columns.map((c) => (
+          <TableColumn key={c.key}>{c.label}</TableColumn>
+        ))}
+      </TableHeader>
+      <TableBody emptyContent={empty || "暂无数据"}>
+        {data.map((row, i) => (
+          <TableRow key={i}>
             {columns.map((c) => (
-              <th key={c.key} className="px-3 md:px-4 py-3 text-left text-xs font-medium text-[var(--loop-muted)] uppercase tracking-wider">
-                {c.label}
-              </th>
+              <TableCell key={c.key}>{c.render ? c.render(row) : String(row[c.key] ?? "")}</TableCell>
             ))}
-          </tr>
-        </thead>
-        <tbody>
-          {data.length === 0 ? (
-            <tr>
-              <td colSpan={columns.length} className="px-4 py-8 text-center text-[var(--loop-muted)]">
-                {empty || "暂无数据"}
-              </td>
-            </tr>
-          ) : (
-            data.map((row, i) => (
-              <tr key={i} className="border-b border-[var(--loop-border)] last:border-0 hover:bg-white/[0.02]">
-                {columns.map((c) => (
-                  <td key={c.key} className="px-3 md:px-4 py-3">
-                    {c.render ? c.render(row) : String(row[c.key] ?? "")}
-                  </td>
-                ))}
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   );
 }
 
@@ -78,22 +85,23 @@ interface ConfirmDialogProps {
 }
 
 export function ConfirmDialog({ open, title, message, onConfirm, onCancel, danger }: ConfirmDialogProps) {
-  if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onCancel}>
-      <div className="bg-[var(--loop-card)] border border-[var(--loop-border)] rounded-2xl p-5 md:p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-lg font-semibold mb-2">{title}</h3>
-        <p className="text-sm text-[var(--loop-muted)] mb-6">{message}</p>
-        <div className="flex justify-end gap-3">
-          <button onClick={onCancel} className="px-4 py-2 text-sm rounded-lg border border-[var(--loop-border)] hover:bg-white/5 transition">
+    <Modal isOpen={open} onOpenChange={(isOpen) => !isOpen && onCancel()}>
+      <ModalContent>
+        <ModalHeader>{title}</ModalHeader>
+        <ModalBody>
+          <p className="text-default-500">{message}</p>
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="flat" onPress={onCancel}>
             取消
-          </button>
-          <button onClick={onConfirm} className={`px-4 py-2 text-sm rounded-lg transition ${danger ? "bg-red-500 hover:bg-red-600 text-white" : "bg-[var(--loop-primary)] hover:opacity-90 text-white"}`}>
+          </Button>
+          <Button color={danger ? "danger" : "primary"} onPress={onConfirm}>
             确认
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
   );
 }
 
@@ -147,46 +155,55 @@ export function KeyFormModal({ title, channels = [], fixedChannelId, initialKey,
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-[var(--loop-card)] border border-[var(--loop-border)] rounded-2xl p-5 md:p-6 w-full max-w-md space-y-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <h2 className="text-lg font-semibold">{title}</h2>
-        {canChooseChannel && (
-          <select
-            value={channelId}
-            onChange={(e) => setChannelId(e.target.value === "" ? "" : Number(e.target.value))}
-            className="w-full px-3 md:px-4 py-2.5 rounded-xl bg-[var(--loop-bg)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm focus:outline-none focus:border-[var(--loop-primary)]"
+    <Modal isOpen onOpenChange={(isOpen) => !isOpen && onClose()} size="md" scrollBehavior="inside">
+      <ModalContent>
+        <ModalHeader>{title}</ModalHeader>
+        <ModalBody className="gap-4">
+          {canChooseChannel && (
+            <Select
+              label="渠道"
+              placeholder="选择渠道"
+              selectedKeys={channelId !== "" ? new Set([String(channelId)]) : new Set()}
+              onSelectionChange={(keys) => {
+                const key = Array.from(keys)[0];
+                setChannelId(key ? Number(key) : "");
+              }}
+            >
+              {channels.map((channel) => (
+                <SelectItem key={String(channel.id)}>{channel.name}</SelectItem>
+              ))}
+            </Select>
+          )}
+          <Input
+            label="别名"
+            placeholder="别名（可选）"
+            value={alias}
+            onValueChange={setAlias}
+          />
+          <Input
+            label="API Key"
+            placeholder="sk-ant-..."
+            value={keyValue}
+            onValueChange={setKeyValue}
+            className="font-mono"
+          />
+          {error && <div className="text-sm text-danger">{error}</div>}
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="flat" onPress={onClose}>
+            取消
+          </Button>
+          <Button
+            color="primary"
+            onPress={handleSubmit}
+            isLoading={saving}
+            isDisabled={!keyValue.trim() || channelId === ""}
           >
-            <option value="">选择渠道</option>
-            {channels.map((channel) => (
-              <option key={channel.id} value={channel.id}>{channel.name}</option>
-            ))}
-          </select>
-        )}
-        <input
-          value={alias}
-          onChange={(e) => setAlias(e.target.value)}
-          placeholder="别名（可选）"
-          className="w-full px-4 py-2.5 rounded-xl bg-[var(--loop-bg)] border border-[var(--loop-border)] text-[var(--loop-text)] placeholder:text-[var(--loop-muted)] focus:outline-none focus:border-[var(--loop-primary)]"
-        />
-        <input
-          value={keyValue}
-          onChange={(e) => setKeyValue(e.target.value)}
-          placeholder="sk-ant-..."
-          className="w-full px-4 py-2.5 rounded-xl bg-[var(--loop-bg)] border border-[var(--loop-border)] text-[var(--loop-text)] placeholder:text-[var(--loop-muted)] focus:outline-none focus:border-[var(--loop-primary)] font-mono text-sm"
-        />
-        {error && <div className="text-sm text-red-400">{error}</div>}
-        <div className="flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-[var(--loop-border)] hover:bg-white/5">取消</button>
-          <button
-            onClick={handleSubmit}
-            disabled={saving || !keyValue.trim() || channelId === ""}
-            className="px-4 py-2 text-sm rounded-lg bg-[var(--loop-primary)] text-white hover:opacity-90 disabled:opacity-40"
-          >
-            {saving ? "保存中..." : "保存"}
-          </button>
-        </div>
-      </div>
-    </div>
+            保存
+          </Button>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
   );
 }
 
@@ -238,49 +255,55 @@ export function KeyImportModal({ channels = [], fixedChannelId, onClose, onImpor
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-[var(--loop-card)] border border-[var(--loop-border)] rounded-2xl p-5 md:p-6 w-full max-w-xl space-y-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <h2 className="text-lg font-semibold">导入 API 密钥</h2>
-        {canChooseChannel && (
-          <select
-            value={channelId}
-            onChange={(e) => setChannelId(e.target.value === "" ? "" : Number(e.target.value))}
-            className="w-full px-4 py-2.5 rounded-xl bg-[var(--loop-bg)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm focus:outline-none focus:border-[var(--loop-primary)]"
+    <Modal isOpen onOpenChange={(isOpen) => !isOpen && onClose()} size="xl" scrollBehavior="inside">
+      <ModalContent>
+        <ModalHeader>导入 API 密钥</ModalHeader>
+        <ModalBody className="gap-4">
+          {canChooseChannel && (
+            <Select
+              label="渠道"
+              placeholder="从 JSON 中读取渠道，或选择统一导入渠道"
+              selectedKeys={channelId !== "" ? new Set([String(channelId)]) : new Set()}
+              onSelectionChange={(keys) => {
+                const key = Array.from(keys)[0];
+                setChannelId(key ? Number(key) : "");
+              }}
+            >
+              {channels.map((channel) => (
+                <SelectItem key={String(channel.id)}>{channel.name}</SelectItem>
+              ))}
+            </Select>
+          )}
+          <Textarea
+            label="导入内容"
+            placeholder={'粘贴导出的 JSON，或每行一个 Key\nsk-ant-...\nsk-ant-...'}
+            value={text}
+            onValueChange={(v) => { setText(v); setError(""); setResult(null); }}
+            minRows={6}
+            className="font-mono text-xs"
+          />
+          {error && <div className="text-sm text-danger">{error}</div>}
+          {result && (
+            <div className="text-sm text-default-500">
+              已导入 {result.created} 个，跳过重复 {result.skipped} 个，失败 {result.failed} 个
+            </div>
+          )}
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="flat" onPress={onClose}>
+            关闭
+          </Button>
+          <Button
+            color="primary"
+            onPress={handleImport}
+            isLoading={saving}
+            isDisabled={!text.trim()}
           >
-            <option value="">从 JSON 中读取渠道，或选择统一导入渠道</option>
-            {channels.map((channel) => (
-              <option key={channel.id} value={channel.id}>{channel.name}</option>
-            ))}
-          </select>
-        )}
-        <textarea
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            setError("");
-            setResult(null);
-          }}
-          placeholder={'粘贴导出的 JSON，或每行一个 Key\nsk-ant-...\nsk-ant-...'}
-          className="min-h-36 md:min-h-52 w-full px-3 md:px-4 py-3 rounded-xl bg-[var(--loop-bg)] border border-[var(--loop-border)] text-[var(--loop-text)] placeholder:text-[var(--loop-muted)] focus:outline-none focus:border-[var(--loop-primary)] font-mono text-xs"
-        />
-        {error && <div className="text-sm text-red-400">{error}</div>}
-        {result && (
-          <div className="text-sm text-[var(--loop-muted)]">
-            已导入 {result.created} 个，跳过重复 {result.skipped} 个，失败 {result.failed} 个
-          </div>
-        )}
-        <div className="flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-[var(--loop-border)] hover:bg-white/5">关闭</button>
-          <button
-            onClick={handleImport}
-            disabled={saving || !text.trim()}
-            className="px-4 py-2 text-sm rounded-lg bg-[var(--loop-primary)] text-white hover:opacity-90 disabled:opacity-40"
-          >
-            {saving ? "导入中..." : "导入"}
-          </button>
-        </div>
-      </div>
-    </div>
+            导入
+          </Button>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
   );
 }
 
@@ -295,13 +318,13 @@ function parseImportKeys(text: string): KeyImportItem[] {
       throw new Error("JSON 需要是数组，或包含 data 数组");
     }
     return data
-      .map((item) => ({
+      .map((item: Record<string, unknown>) => ({
         channel_id: Number(item.channel_id) || undefined,
         key_value: String(item.key_value || item.key || "").trim(),
         alias: String(item.alias || "").trim(),
         is_active: typeof item.is_active === "boolean" ? item.is_active : undefined,
       }))
-      .filter((item) => item.key_value);
+      .filter((item: KeyImportItem) => item.key_value);
   }
 
   return trimmed
