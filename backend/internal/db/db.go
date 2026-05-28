@@ -27,6 +27,9 @@ func Open(dbPath string) (*sql.DB, error) {
 	if err := ensureColumn(db, "usage_logs", "output_tokens_per_sec", "ALTER TABLE usage_logs ADD COLUMN output_tokens_per_sec REAL NOT NULL DEFAULT 0"); err != nil {
 		return nil, fmt.Errorf("migrate usage_logs.output_tokens_per_sec: %w", err)
 	}
+	if err := ensureColumn(db, "usage_logs", "status", "ALTER TABLE usage_logs ADD COLUMN status TEXT NOT NULL DEFAULT 'success'"); err != nil {
+		return nil, fmt.Errorf("migrate usage_logs.status: %w", err)
+	}
 	return db, nil
 }
 

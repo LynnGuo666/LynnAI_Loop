@@ -15,6 +15,7 @@ export function UsagePage() {
     api_key_id: "",
     model: "",
     success: "",
+    status: "",
     start_date: "",
     end_date: "",
   });
@@ -26,6 +27,7 @@ export function UsagePage() {
     if (filters.model) f.model = filters.model;
     if (filters.success === "true") f.success = true;
     if (filters.success === "false") f.success = false;
+    if (filters.status) f.status = filters.status;
     if (filters.start_date) f.start_date = filters.start_date;
     if (filters.end_date) f.end_date = filters.end_date;
     listUsage(f as any).then((r) => { setLogs(r.data || []); setTotal(r.total); }).catch(() => {});
@@ -55,7 +57,7 @@ export function UsagePage() {
     <div className="space-y-4 md:space-y-6">
       <div>
         <h1 className="text-xl md:text-2xl font-bold">用量</h1>
-        <p className="text-sm text-[var(--loop-muted)] mt-1">这里只统计外部业务请求；手动探测和自动恢复探测不计入用量。</p>
+        <p className="text-sm text-[var(--loop-muted)] mt-1">统计所有请求的 API 用量，包括代理请求和探测请求。</p>
       </div>
       <div className="flex flex-wrap gap-2 md:gap-3">
         <select value={filters.channel_id} onChange={(e) => { setFilters({ ...filters, channel_id: e.target.value }); setPage(1); }}
@@ -67,6 +69,13 @@ export function UsagePage() {
           className="flex-1 min-w-[120px] px-3 py-2 rounded-xl bg-[var(--loop-card)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm">
           <option value="">全部模型</option>
           {models.map((m) => <option key={m} value={m}>{m}</option>)}
+        </select>
+        <select value={filters.status} onChange={(e) => { setFilters({ ...filters, status: e.target.value }); setPage(1); }}
+          className="flex-1 min-w-[100px] px-3 py-2 rounded-xl bg-[var(--loop-card)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm">
+          <option value="">全部状态</option>
+          <option value="pending">进行中</option>
+          <option value="success">成功</option>
+          <option value="failed">失败</option>
         </select>
         <select value={filters.success} onChange={(e) => { setFilters({ ...filters, success: e.target.value }); setPage(1); }}
           className="flex-1 min-w-[100px] px-3 py-2 rounded-xl bg-[var(--loop-card)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm">
@@ -87,6 +96,7 @@ export function UsagePage() {
               <th className="px-3 md:px-4 py-3 text-left text-xs font-medium text-[var(--loop-muted)] uppercase tracking-wider">渠道</th>
               <th className="px-3 md:px-4 py-3 text-left text-xs font-medium text-[var(--loop-muted)] uppercase tracking-wider">Key</th>
               <th className="px-3 md:px-4 py-3 text-left text-xs font-medium text-[var(--loop-muted)] uppercase tracking-wider">模型</th>
+              <th className="px-3 md:px-4 py-3 text-left text-xs font-medium text-[var(--loop-muted)] uppercase tracking-wider">状态</th>
               <th className="px-3 md:px-4 py-3 text-left text-xs font-medium text-[var(--loop-muted)] uppercase tracking-wider">延迟</th>
               <th className="px-3 md:px-4 py-3 text-left text-xs font-medium text-[var(--loop-muted)] uppercase tracking-wider">性能</th>
               <th className="px-3 md:px-4 py-3 text-left text-xs font-medium text-[var(--loop-muted)] uppercase tracking-wider">时间</th>
@@ -96,22 +106,32 @@ export function UsagePage() {
           <tbody>
             {logs.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-[var(--loop-muted)]">暂无用量记录</td>
+                <td colSpan={9} className="px-4 py-8 text-center text-[var(--loop-muted)]">暂无用量记录</td>
               </tr>
             ) : (
               logs.map((log) => {
                 const expanded = expandedId === log.id;
+                const isPending = log.status === "pending";
                 return (
                   <Fragment key={log.id}>
                     <tr key={log.id} className="border-b border-[var(--loop-border)] hover:bg-white/[0.02]">
                       <td className="px-3 md:px-4 py-3">{log.id}</td>
                       <td className="px-3 md:px-4 py-3">{channelMap.get(log.channel_id) || `#${log.channel_id}`}</td>
                       <td className="px-3 md:px-4 py-3">{keyMap.get(log.api_key_id) || `#${log.api_key_id}`}</td>
-                      <td className="px-3 md:px-4 py-3">{log.model}</td>
-                      <td className="px-3 md:px-4 py-3">{log.latency_ms}ms</td>
+                      <td className="px-3 md:px-4 py-3">{log.model || "-"}</td>
                       <td className="px-3 md:px-4 py-3">
-                        <div>{formatMs(log.first_token_ms)}</div>
-                        <div className="text-xs text-[var(--loop-muted)]">{formatSpeed(log.output_tokens_per_sec)}</div>
+                        <StatusBadge status={log.status} />
+                      </td>
+                      <td className="px-3 md:px-4 py-3">{isPending ? "-" : `${log.latency_ms}ms`}</td>
+                      <td className="px-3 md:px-4 py-3">
+                        {isPending ? (
+                          <span className="text-[var(--loop-muted)]">-</span>
+                        ) : (
+                          <>
+                            <div>{formatMs(log.first_token_ms)}</div>
+                            <div className="text-xs text-[var(--loop-muted)]">{formatSpeed(log.output_tokens_per_sec)}</div>
+                          </>
+                        )}
                       </td>
                       <td className="px-3 md:px-4 py-3 whitespace-nowrap">{new Date(log.created_at).toLocaleString()}</td>
                       <td className="px-3 md:px-4 py-3 text-right">
@@ -125,16 +145,16 @@ export function UsagePage() {
                     </tr>
                     {expanded && (
                       <tr key={`${log.id}-details`} className="border-b border-[var(--loop-border)] bg-white/[0.02]">
-                        <td colSpan={8} className="px-3 md:px-4 py-4">
+                        <td colSpan={9} className="px-3 md:px-4 py-4">
                           <div className="grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
-                            <DetailItem label="输入令牌" value={formatTokens(log.input_tokens)} />
-                            <DetailItem label="输出令牌" value={formatTokens(log.output_tokens)} />
-                            <DetailItem label="缓存写" value={formatTokens(log.cache_creation_tokens)} />
-                            <DetailItem label="缓存读" value={formatTokens(log.cache_read_tokens)} />
-                            <DetailItem label="状态" value={log.success ? `${log.status_code}` : `错误 ${log.status_code}`} tone={log.success ? "success" : "danger"} />
-                            <DetailItem label="流式" value={log.is_stream ? "是" : "否"} />
+                            <DetailItem label="输入令牌" value={isPending ? "-" : formatTokens(log.input_tokens)} />
+                            <DetailItem label="输出令牌" value={isPending ? "-" : formatTokens(log.output_tokens)} />
+                            <DetailItem label="缓存写" value={isPending ? "-" : formatTokens(log.cache_creation_tokens)} />
+                            <DetailItem label="缓存读" value={isPending ? "-" : formatTokens(log.cache_read_tokens)} />
+                            <DetailItem label="请求结果" value={isPending ? "进行中" : log.success ? `${log.status_code}` : `错误 ${log.status_code}`} tone={isPending ? undefined : log.success ? "success" : "danger"} />
+                            <DetailItem label="流式" value={isPending ? "-" : log.is_stream ? "是" : "否"} />
                             <DetailItem label="端点" value={log.endpoint || "-"} />
-                            <DetailItem label="错误信息" value={log.error_message || "-"} tone={log.error_message ? "danger" : undefined} />
+                            <DetailItem label="错误信息" value={isPending ? "-" : log.error_message || "-"} tone={!isPending && log.error_message ? "danger" : undefined} />
                           </div>
                         </td>
                       </tr>
@@ -157,6 +177,24 @@ export function UsagePage() {
       )}
     </div>
   );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  if (status === "pending") {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-amber-400">
+        <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+        </svg>
+        <span className="text-xs font-medium">请求中</span>
+      </span>
+    );
+  }
+  if (status === "failed") {
+    return <span className="text-xs font-medium text-red-400">失败</span>;
+  }
+  return <span className="text-xs font-medium text-green-400">成功</span>;
 }
 
 function DetailItem({

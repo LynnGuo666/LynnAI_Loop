@@ -105,6 +105,21 @@ func (ph *ProxyHandler) HandleMessages(w http.ResponseWriter, r *http.Request) {
 		clientIP = strings.Split(fwd, ",")[0]
 	}
 
+	var usageLogID int64
+	if ph.usageRepo != nil {
+		pendingLog := &models.UsageLog{
+			ChannelID: ch.ID,
+			APIKeyID:  0,
+			Model:     reqBody.Model,
+			Endpoint:  "/v1/messages",
+			ClientIP:  clientIP,
+			Status:    "pending",
+			CreatedAt: time.Now(),
+		}
+		ph.usageRepo.CreatePending(pendingLog)
+		usageLogID = pendingLog.ID
+	}
+
 	var lastErr error
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		key, err := ph.rotator.Select(channelID)
@@ -140,9 +155,9 @@ func (ph *ProxyHandler) HandleMessages(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if reqBody.Stream {
-			err = ph.handleStreamResponse(w, resp, key, ch, reqBody.Model, "/v1/messages", clientIP, startTime)
+			err = ph.handleStreamResponse(w, resp, key, ch, reqBody.Model, "/v1/messages", clientIP, startTime, usageLogID)
 		} else {
-			err = ph.handleNonStreamResponse(w, resp, key, ch, reqBody.Model, "/v1/messages", clientIP, startTime)
+			err = ph.handleNonStreamResponse(w, resp, key, ch, reqBody.Model, "/v1/messages", clientIP, startTime, usageLogID)
 		}
 
 		if err == nil {
@@ -154,6 +169,13 @@ func (ph *ProxyHandler) HandleMessages(w http.ResponseWriter, r *http.Request) {
 	msg := "all_keys_exhausted"
 	if lastErr != nil && lastErr == ErrNoActiveKeys {
 		msg = "no_active_keys"
+	}
+	if usageLogID > 0 {
+		ph.usageRepo.UpdateCompleted(usageLogID, &models.UsageLog{
+			Status:       "failed",
+			Success:      false,
+			ErrorMessage: msg,
+		})
 	}
 	http.Error(w, fmt.Sprintf(`{"error":{"type":"proxy_error","message":"%s"}}`, msg), http.StatusBadGateway)
 }
@@ -200,7 +222,7 @@ func (ph *ProxyHandler) HandleModels(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, resp.Body)
 }
 
-func (ph *ProxyHandler) handleStreamResponse(w http.ResponseWriter, resp *http.Response, key *models.APIKey, ch *models.Channel, model, endpoint, clientIP string, startTime time.Time) error {
+func (ph *ProxyHandler) handleStreamResponse(w http.ResponseWriter, resp *http.Response, key *models.APIKey, ch *models.Channel, model, endpoint, clientIP string, startTime time.Time, usageLogID int64) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -210,6 +232,9 @@ func (ph *ProxyHandler) handleStreamResponse(w http.ResponseWriter, resp *http.R
 			ph.rotator.ReportFailure(key.ID)
 			return fmt.Errorf("upstream %d", resp.StatusCode)
 		}
+		latency := time.Since(startTime).Milliseconds()
+		ph.updateUsage(usageLogID, key, ch, model, endpoint, 0, 0, 0, 0,
+			true, resp.StatusCode, latency, 0, 0, fmt.Sprintf("upstream %d", resp.StatusCode), clientIP)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(resp.StatusCode)
 		w.Write(body)
@@ -272,12 +297,12 @@ func (ph *ProxyHandler) handleStreamResponse(w http.ResponseWriter, resp *http.R
 		firstTokenMs = latency
 	}
 	outputSpeed := outputTokensPerSec(outputTokens, latency-firstTokenMs)
-	ph.logUsage(key, ch, model, endpoint, inputTokens, outputTokens, cacheCreate, cacheRead,
+	ph.updateUsage(usageLogID, key, ch, model, endpoint, inputTokens, outputTokens, cacheCreate, cacheRead,
 		true, resp.StatusCode, latency, firstTokenMs, outputSpeed, "", clientIP)
 	return nil
 }
 
-func (ph *ProxyHandler) handleNonStreamResponse(w http.ResponseWriter, resp *http.Response, key *models.APIKey, ch *models.Channel, model, endpoint, clientIP string, startTime time.Time) error {
+func (ph *ProxyHandler) handleNonStreamResponse(w http.ResponseWriter, resp *http.Response, key *models.APIKey, ch *models.Channel, model, endpoint, clientIP string, startTime time.Time, usageLogID int64) error {
 	body, err := readDecodedBody(resp)
 	resp.Body.Close()
 	if err != nil {
@@ -290,6 +315,9 @@ func (ph *ProxyHandler) handleNonStreamResponse(w http.ResponseWriter, resp *htt
 			ph.rotator.ReportFailure(key.ID)
 			return fmt.Errorf("upstream %d", resp.StatusCode)
 		}
+		latency := time.Since(startTime).Milliseconds()
+		ph.updateUsage(usageLogID, key, ch, model, endpoint, 0, 0, 0, 0,
+			false, resp.StatusCode, latency, 0, 0, fmt.Sprintf("upstream %d", resp.StatusCode), clientIP)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(resp.StatusCode)
 		w.Write(body)
@@ -302,7 +330,7 @@ func (ph *ProxyHandler) handleNonStreamResponse(w http.ResponseWriter, resp *htt
 
 	latency := time.Since(startTime).Milliseconds()
 	outputSpeed := outputTokensPerSec(usage.OutputTokens, latency)
-	ph.logUsage(key, ch, model, endpoint, usage.InputTokens, usage.OutputTokens,
+	ph.updateUsage(usageLogID, key, ch, model, endpoint, usage.InputTokens, usage.OutputTokens,
 		usage.CacheCreationTokens, usage.CacheReadTokens, false, resp.StatusCode, latency, latency, outputSpeed, "", clientIP)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -311,11 +339,15 @@ func (ph *ProxyHandler) handleNonStreamResponse(w http.ResponseWriter, resp *htt
 	return nil
 }
 
-func (ph *ProxyHandler) logUsage(key *models.APIKey, ch *models.Channel, model, endpoint string, input, output, cacheCreate, cacheRead int64, isStream bool, statusCode int, latencyMs, firstTokenMs int64, outputTokensPerSec float64, errMsg, clientIP string) {
-	if ph.usageRepo == nil {
+func (ph *ProxyHandler) updateUsage(usageLogID int64, key *models.APIKey, ch *models.Channel, model, endpoint string, input, output, cacheCreate, cacheRead int64, isStream bool, statusCode int, latencyMs, firstTokenMs int64, outputTokensPerSec float64, errMsg, clientIP string) {
+	if ph.usageRepo == nil || usageLogID <= 0 {
 		return
 	}
-	ph.usageRepo.Create(&models.UsageLog{
+	status := "success"
+	if errMsg != "" {
+		status = "failed"
+	}
+	ph.usageRepo.UpdateCompleted(usageLogID, &models.UsageLog{
 		ChannelID:           ch.ID,
 		APIKeyID:            key.ID,
 		Model:               model,
@@ -331,8 +363,7 @@ func (ph *ProxyHandler) logUsage(key *models.APIKey, ch *models.Channel, model, 
 		OutputTokensPerSec:  outputTokensPerSec,
 		Success:             errMsg == "",
 		ErrorMessage:        errMsg,
-		ClientIP:            clientIP,
-		CreatedAt:           time.Now(),
+		Status:              status,
 	})
 }
 

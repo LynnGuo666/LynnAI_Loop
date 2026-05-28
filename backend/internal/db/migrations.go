@@ -39,15 +39,16 @@ CREATE TABLE IF NOT EXISTS usage_logs (
     input_tokens INTEGER NOT NULL DEFAULT 0,
     output_tokens INTEGER NOT NULL DEFAULT 0,
     cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
-	    cache_read_tokens INTEGER NOT NULL DEFAULT 0,
-	    is_stream INTEGER NOT NULL DEFAULT 0,
-	    status_code INTEGER NOT NULL DEFAULT 0,
-	    latency_ms INTEGER NOT NULL DEFAULT 0,
-	    first_token_ms INTEGER NOT NULL DEFAULT 0,
-	    output_tokens_per_sec REAL NOT NULL DEFAULT 0,
-	    success INTEGER NOT NULL DEFAULT 0,
-	    error_message TEXT NOT NULL DEFAULT '',
+    cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+    is_stream INTEGER NOT NULL DEFAULT 0,
+    status_code INTEGER NOT NULL DEFAULT 0,
+    latency_ms INTEGER NOT NULL DEFAULT 0,
+    first_token_ms INTEGER NOT NULL DEFAULT 0,
+    output_tokens_per_sec REAL NOT NULL DEFAULT 0,
+    success INTEGER NOT NULL DEFAULT 0,
+    error_message TEXT NOT NULL DEFAULT '',
     client_ip TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'success',
     created_at DATETIME NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -72,4 +73,5 @@ CREATE INDEX IF NOT EXISTS idx_api_keys_active ON api_keys(is_active);
 CREATE INDEX IF NOT EXISTS idx_usage_logs_channel ON usage_logs(channel_id);
 CREATE INDEX IF NOT EXISTS idx_usage_logs_created ON usage_logs(created_at);
 CREATE INDEX IF NOT EXISTS idx_key_probes_key ON key_probes(api_key_id);
+CREATE INDEX IF NOT EXISTS idx_usage_logs_status ON usage_logs(status);
 `

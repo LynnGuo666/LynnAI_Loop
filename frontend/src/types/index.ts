@@ -48,6 +48,7 @@ export interface UsageLog {
   success: boolean;
   error_message: string;
   client_ip: string;
+  status: string;
   created_at: string;
 }
 

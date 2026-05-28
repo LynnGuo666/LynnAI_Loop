@@ -20,12 +20,12 @@ func (r *UsageRepo) Create(log *models.UsageLog) error {
 	result, err := r.db.Exec(
 		`INSERT INTO usage_logs (channel_id, api_key_id, model, endpoint, input_tokens, output_tokens,
 		        cache_creation_tokens, cache_read_tokens, is_stream, status_code, latency_ms,
-		        first_token_ms, output_tokens_per_sec, success, error_message, client_ip, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		        first_token_ms, output_tokens_per_sec, success, error_message, client_ip, status, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		log.ChannelID, log.APIKeyID, log.Model, log.Endpoint, log.InputTokens, log.OutputTokens,
 		log.CacheCreationTokens, log.CacheReadTokens, boolToInt(log.IsStream), log.StatusCode,
 		log.LatencyMs, log.FirstTokenMs, log.OutputTokensPerSec, boolToInt(log.Success),
-		log.ErrorMessage, log.ClientIP, log.CreatedAt,
+		log.ErrorMessage, log.ClientIP, log.Status, log.CreatedAt,
 	)
 	if err != nil {
 		return err
@@ -34,10 +34,39 @@ func (r *UsageRepo) Create(log *models.UsageLog) error {
 	return nil
 }
 
+func (r *UsageRepo) CreatePending(log *models.UsageLog) error {
+	log.Status = "pending"
+	result, err := r.db.Exec(
+		`INSERT INTO usage_logs (channel_id, api_key_id, model, endpoint, client_ip, status, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		log.ChannelID, log.APIKeyID, log.Model, log.Endpoint, log.ClientIP, log.Status, log.CreatedAt,
+	)
+	if err != nil {
+		return err
+	}
+	log.ID, _ = result.LastInsertId()
+	return nil
+}
+
+func (r *UsageRepo) UpdateCompleted(id int64, log *models.UsageLog) error {
+	_, err := r.db.Exec(
+		`UPDATE usage_logs SET input_tokens = ?, output_tokens = ?, cache_creation_tokens = ?,
+		        cache_read_tokens = ?, is_stream = ?, status_code = ?, latency_ms = ?,
+		        first_token_ms = ?, output_tokens_per_sec = ?, success = ?, error_message = ?,
+		        status = ?
+		 WHERE id = ?`,
+		log.InputTokens, log.OutputTokens, log.CacheCreationTokens, log.CacheReadTokens,
+		boolToInt(log.IsStream), log.StatusCode, log.LatencyMs, log.FirstTokenMs,
+		log.OutputTokensPerSec, boolToInt(log.Success), log.ErrorMessage, log.Status, id,
+	)
+	return err
+}
+
 type UsageFilter struct {
 	ChannelID int64
 	APIKeyID  int64
 	Success   *bool
+	Status    string
 	StartDate string
 	EndDate   string
 	Model     string
@@ -65,7 +94,7 @@ func (r *UsageRepo) List(f UsageFilter) ([]models.UsageLog, int, error) {
 	query := fmt.Sprintf(
 		`SELECT id, channel_id, api_key_id, model, endpoint, input_tokens, output_tokens,
 		        cache_creation_tokens, cache_read_tokens, is_stream, status_code, latency_ms,
-		        first_token_ms, output_tokens_per_sec, success, error_message, client_ip, created_at
+		        first_token_ms, output_tokens_per_sec, success, error_message, client_ip, status, created_at
 		 FROM usage_logs %s ORDER BY id DESC LIMIT ? OFFSET ?`, where,
 	)
 	args = append(args, f.PageSize, offset)
@@ -83,7 +112,7 @@ func (r *UsageRepo) List(f UsageFilter) ([]models.UsageLog, int, error) {
 		if err := rows.Scan(&l.ID, &l.ChannelID, &l.APIKeyID, &l.Model, &l.Endpoint,
 			&l.InputTokens, &l.OutputTokens, &l.CacheCreationTokens, &l.CacheReadTokens,
 			&isStream, &l.StatusCode, &l.LatencyMs, &l.FirstTokenMs, &l.OutputTokensPerSec,
-			&success, &l.ErrorMessage, &l.ClientIP, &l.CreatedAt); err != nil {
+			&success, &l.ErrorMessage, &l.ClientIP, &l.Status, &l.CreatedAt); err != nil {
 			return nil, 0, err
 		}
 		l.IsStream = isStream == 1
@@ -186,6 +215,10 @@ func buildUsageWhere(f UsageFilter) (string, []interface{}) {
 	if f.Model != "" {
 		conds = append(conds, "model = ?")
 		args = append(args, f.Model)
+	}
+	if f.Status != "" {
+		conds = append(conds, "status = ?")
+		args = append(args, f.Status)
 	}
 	if len(conds) == 0 {
 		return "", args

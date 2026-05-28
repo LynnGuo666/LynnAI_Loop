@@ -21,6 +21,7 @@ type RecoveryProbe struct {
 	probeRepo    *repo.KeyProbeRepo
 	settingsRepo *repo.SettingsRepo
 	channelRepo  *repo.ChannelRepo
+	usageRepo    *repo.UsageRepo
 	cfg          config.Config
 	client       *http.Client
 }
@@ -31,12 +32,13 @@ type upstreamModelsResponse struct {
 	} `json:"data"`
 }
 
-func NewRecoveryProbe(keyRepo *repo.APIKeyRepo, probeRepo *repo.KeyProbeRepo, settingsRepo *repo.SettingsRepo, channelRepo *repo.ChannelRepo, cfg config.Config) *RecoveryProbe {
+func NewRecoveryProbe(keyRepo *repo.APIKeyRepo, probeRepo *repo.KeyProbeRepo, settingsRepo *repo.SettingsRepo, channelRepo *repo.ChannelRepo, usageRepo *repo.UsageRepo, cfg config.Config) *RecoveryProbe {
 	return &RecoveryProbe{
 		keyRepo:      keyRepo,
 		probeRepo:    probeRepo,
 		settingsRepo: settingsRepo,
 		channelRepo:  channelRepo,
+		usageRepo:    usageRepo,
 		cfg:          cfg,
 		client:       &http.Client{Timeout: 30 * time.Second},
 	}
@@ -84,11 +86,13 @@ func (rp *RecoveryProbe) runProbeCycle(ctx context.Context) {
 func (rp *RecoveryProbe) probeOneKey(ctx context.Context, key models.APIKey) {
 	log.Printf("probing key %d (alias=%s)", key.ID, key.Alias)
 
-	probe, err := rp.runProbe(ctx, &key)
+	probe, respBody, err := rp.runProbe(ctx, &key)
 	if err != nil {
 		log.Printf("probe: key %d error: %v", key.ID, err)
 		return
 	}
+
+	rp.recordProbeUsage(&key, &probe, respBody)
 
 	if !probe.Success {
 		rp.recordProbeFailure(key, probe)
@@ -104,6 +108,37 @@ func (rp *RecoveryProbe) probeOneKey(ctx context.Context, key models.APIKey) {
 	key.ProbeBackoffMin = rp.cfg.ProbeBackoffBaseMin
 	rp.keyRepo.Update(&key)
 	log.Printf("key %d re-enabled after probe success", key.ID)
+}
+
+func (rp *RecoveryProbe) recordProbeUsage(key *models.APIKey, probe *models.KeyProbe, respBody []byte) {
+	if rp.usageRepo == nil {
+		return
+	}
+	var inputTokens, outputTokens int64
+	if probe.Success && len(respBody) > 0 {
+		usage := extractUsageFromBody(respBody)
+		inputTokens = usage.InputTokens
+		outputTokens = usage.OutputTokens
+	}
+	status := "success"
+	if !probe.Success {
+		status = "failed"
+	}
+	rp.usageRepo.Create(&models.UsageLog{
+		ChannelID:    key.ChannelID,
+		APIKeyID:     key.ID,
+		Model:        "",
+		Endpoint:     "/v1/messages",
+		InputTokens:  inputTokens,
+		OutputTokens: outputTokens,
+		IsStream:     false,
+		StatusCode:   probe.StatusCode,
+		LatencyMs:    probe.LatencyMs,
+		Success:      probe.Success,
+		ErrorMessage: probe.ErrorMsg,
+		Status:       status,
+		CreatedAt:    time.Now(),
+	})
 }
 
 func (rp *RecoveryProbe) recordProbeFailure(key models.APIKey, probe models.KeyProbe) {
@@ -127,10 +162,12 @@ func (rp *RecoveryProbe) ProbeSingleKey(ctx context.Context, keyID int64) (*mode
 		return nil, fmt.Errorf("key not found: %w", err)
 	}
 
-	probe, err := rp.runProbe(ctx, key)
+	probe, respBody, err := rp.runProbe(ctx, key)
 	if err != nil {
 		return nil, err
 	}
+
+	rp.recordProbeUsage(key, &probe, respBody)
 
 	if !probe.Success {
 		if isAuthFailure(probe.StatusCode) {
@@ -155,7 +192,7 @@ func (rp *RecoveryProbe) ProbeSingleKey(ctx context.Context, keyID int64) (*mode
 	return &probe, nil
 }
 
-func (rp *RecoveryProbe) runProbe(ctx context.Context, key *models.APIKey) (models.KeyProbe, error) {
+func (rp *RecoveryProbe) runProbe(ctx context.Context, key *models.APIKey) (models.KeyProbe, []byte, error) {
 	probe := models.KeyProbe{
 		APIKeyID:  key.ID,
 		CreatedAt: time.Now(),
@@ -163,7 +200,7 @@ func (rp *RecoveryProbe) runProbe(ctx context.Context, key *models.APIKey) (mode
 
 	ch, err := rp.channelRepo.GetByID(key.ChannelID)
 	if err != nil {
-		return probe, err
+		return probe, nil, err
 	}
 
 	modelID := strings.TrimSpace(ch.ProbeModel)
@@ -172,23 +209,25 @@ func (rp *RecoveryProbe) runProbe(ctx context.Context, key *models.APIKey) (mode
 		models, probe.StatusCode, probe.LatencyMs, err = rp.fetchProbeModels(ctx, ch, key)
 		if err != nil {
 			probe.ErrorMsg = err.Error()
-			return probe, nil
+			return probe, nil, nil
 		}
 		modelID = chooseProbeModel(models)
 		if modelID == "" {
 			probe.ErrorMsg = "未配置探测模型，且 /v1/models 没有返回可用模型"
-			return probe, nil
+			return probe, nil, nil
 		}
 	}
 
-	probe.StatusCode, probe.LatencyMs, err = rp.probeMessages(ctx, ch, key, modelID)
+	respBody, statusCode, latency, err := rp.probeMessages(ctx, ch, key, modelID)
+	probe.StatusCode = statusCode
+	probe.LatencyMs = latency
 	if err != nil {
 		probe.ErrorMsg = err.Error()
-		return probe, nil
+		return probe, respBody, nil
 	}
 
 	probe.Success = true
-	return probe, nil
+	return probe, respBody, nil
 }
 
 func (rp *RecoveryProbe) fetchProbeModels(ctx context.Context, ch *models.Channel, key *models.APIKey) ([]string, int, int64, error) {
@@ -229,7 +268,7 @@ func (rp *RecoveryProbe) fetchProbeModels(ctx context.Context, ch *models.Channe
 	return modelIDs, resp.StatusCode, latency, nil
 }
 
-func (rp *RecoveryProbe) probeMessages(ctx context.Context, ch *models.Channel, key *models.APIKey, modelID string) (int, int64, error) {
+func (rp *RecoveryProbe) probeMessages(ctx context.Context, ch *models.Channel, key *models.APIKey, modelID string) ([]byte, int, int64, error) {
 	body, _ := json.Marshal(map[string]interface{}{
 		"model":      modelID,
 		"max_tokens": 1,
@@ -238,7 +277,7 @@ func (rp *RecoveryProbe) probeMessages(ctx context.Context, ch *models.Channel, 
 
 	req, err := http.NewRequestWithContext(ctx, "POST", joinUpstreamURL(ch.BaseURL, "/v1/messages"), bytes.NewReader(body))
 	if err != nil {
-		return 0, 0, err
+		return nil, 0, 0, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-api-key", key.KeyValue)
@@ -248,19 +287,19 @@ func (rp *RecoveryProbe) probeMessages(ctx context.Context, ch *models.Channel, 
 	resp, err := rp.client.Do(req)
 	latency := time.Since(start).Milliseconds()
 	if err != nil {
-		return 0, latency, err
+		return nil, 0, latency, err
 	}
 	defer resp.Body.Close()
-	io.Copy(io.Discard, resp.Body)
+	respBody, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		if isAuthFailure(resp.StatusCode) {
-			return resp.StatusCode, latency, fmt.Errorf("认证失败: %d", resp.StatusCode)
+			return respBody, resp.StatusCode, latency, fmt.Errorf("认证失败: %d", resp.StatusCode)
 		}
-		return resp.StatusCode, latency, fmt.Errorf("/v1/messages 探测失败: %d", resp.StatusCode)
+		return respBody, resp.StatusCode, latency, fmt.Errorf("/v1/messages 探测失败: %d", resp.StatusCode)
 	}
 
-	return resp.StatusCode, latency, nil
+	return respBody, resp.StatusCode, latency, nil
 }
 
 func chooseProbeModel(modelIDs []string) string {

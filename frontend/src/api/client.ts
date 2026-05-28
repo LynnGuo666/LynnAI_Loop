@@ -113,6 +113,7 @@ export interface UsageFilter {
   channel_id?: number;
   api_key_id?: number;
   success?: boolean;
+  status?: string;
   start_date?: string;
   end_date?: string;
   model?: string;

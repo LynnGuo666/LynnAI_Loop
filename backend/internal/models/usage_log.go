@@ -20,5 +20,6 @@ type UsageLog struct {
 	Success             bool      `json:"success"`
 	ErrorMessage        string    `json:"error_message"`
 	ClientIP            string    `json:"client_ip"`
+	Status              string    `json:"status"`
 	CreatedAt           time.Time `json:"created_at"`
 }

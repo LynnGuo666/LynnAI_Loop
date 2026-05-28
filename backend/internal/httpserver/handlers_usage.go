@@ -13,6 +13,7 @@ func (h *Handlers) ListUsage(w http.ResponseWriter, r *http.Request) {
 		StartDate: q.Get("start_date"),
 		EndDate:   q.Get("end_date"),
 		Model:     q.Get("model"),
+		Status:    q.Get("status"),
 	}
 	if v := q.Get("channel_id"); v != "" {
 		f.ChannelID, _ = strconv.ParseInt(v, 10, 64)

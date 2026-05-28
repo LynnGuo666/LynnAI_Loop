@@ -62,7 +62,7 @@ func (s *Server) Run() error {
 
 	rotator := services.NewKeyRotator(keyRepo, s.cfg)
 	proxy := services.NewProxyHandler(rotator, channelRepo, usageRepo, s.cfg)
-	recoveryProbe := services.NewRecoveryProbe(keyRepo, probeRepo, settingsRepo, channelRepo, s.cfg)
+	recoveryProbe := services.NewRecoveryProbe(keyRepo, probeRepo, settingsRepo, channelRepo, usageRepo, s.cfg)
 
 	// Start recovery probe
 	ctx, cancel := context.WithCancel(context.Background())
