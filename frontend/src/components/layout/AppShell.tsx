@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuthStore } from "../../stores/auth";
 import { AnimatePresence, motion } from "framer-motion";
@@ -35,12 +35,21 @@ function NavLinks({ onClick }: { onClick?: () => void }) {
   );
 }
 
-function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+function SidebarContent({
+  onNavigate,
+  theme,
+  toggleTheme,
+}: {
+  onNavigate?: () => void;
+  theme: Theme;
+  toggleTheme: () => void;
+}) {
   const logout = useAuthStore((s) => s.logout);
   return (
     <>
-      <div className="px-5 py-5 text-lg font-bold tracking-tight text-[var(--loop-primary)]">
-        Loop
+      <div className="flex items-center justify-between px-5 py-5">
+        <div className="text-lg font-bold tracking-tight text-[var(--loop-primary)]">Loop</div>
+        <ThemeButton theme={theme} onClick={toggleTheme} />
       </div>
       <NavLinks onClick={onNavigate} />
       <button
@@ -55,12 +64,13 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
 export function AppShell() {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const { theme, toggleTheme } = useTheme();
 
   return (
     <div className="flex min-h-screen">
       {/* Desktop sidebar */}
       <aside className="hidden md:flex w-56 shrink-0 border-r border-[var(--loop-border)] bg-[var(--loop-card)] flex-col h-screen sticky top-0">
-        <SidebarContent />
+        <SidebarContent theme={theme} toggleTheme={toggleTheme} />
       </aside>
 
       {/* Mobile drawer */}
@@ -82,7 +92,7 @@ export function AppShell() {
               transition={{ type: "spring", damping: 25, stiffness: 300 }}
               className="fixed inset-y-0 left-0 z-50 w-64 bg-[var(--loop-card)] border-r border-[var(--loop-border)] flex flex-col md:hidden"
             >
-              <SidebarContent onNavigate={() => setDrawerOpen(false)} />
+              <SidebarContent theme={theme} toggleTheme={toggleTheme} onNavigate={() => setDrawerOpen(false)} />
             </motion.aside>
           </>
         )}
@@ -101,6 +111,9 @@ export function AppShell() {
             </svg>
           </button>
           <span className="ml-3 text-base font-bold tracking-tight text-[var(--loop-primary)]">Loop</span>
+          <div className="ml-auto">
+            <ThemeButton theme={theme} onClick={toggleTheme} />
+          </div>
         </header>
 
         <main className="flex-1 p-4 md:p-6 overflow-auto">
@@ -108,5 +121,52 @@ export function AppShell() {
         </main>
       </div>
     </div>
+  );
+}
+
+type Theme = "dark" | "light";
+
+function getInitialTheme(): Theme {
+  const stored = localStorage.getItem("loop_theme");
+  if (stored === "light" || stored === "dark") return stored;
+  return "dark";
+}
+
+function useTheme() {
+  const [theme, setTheme] = useState<Theme>(getInitialTheme);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem("loop_theme", theme);
+  }, [theme]);
+
+  return {
+    theme,
+    toggleTheme: () => setTheme((current) => (current === "dark" ? "light" : "dark")),
+  };
+}
+
+function ThemeButton({ theme, onClick }: { theme: Theme; onClick: () => void }) {
+  const isDark = theme === "dark";
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={isDark ? "切换到浅色模式" : "切换到深色模式"}
+      aria-label={isDark ? "切换到浅色模式" : "切换到深色模式"}
+      className="grid h-8 w-8 place-items-center rounded-lg border border-[var(--loop-border)] text-[var(--loop-muted)] hover:bg-[var(--loop-hover)] hover:text-[var(--loop-text)] transition"
+    >
+      {isDark ? (
+        <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+          <circle cx="10" cy="10" r="3.5" />
+          <path d="M10 1.8v2M10 16.2v2M3.2 3.2l1.4 1.4M15.4 15.4l1.4 1.4M1.8 10h2M16.2 10h2M3.2 16.8l1.4-1.4M15.4 4.6l1.4-1.4" />
+        </svg>
+      ) : (
+        <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M16.5 11.2A6.5 6.5 0 0 1 8.8 3.5 6.8 6.8 0 1 0 16.5 11.2Z" />
+        </svg>
+      )}
+    </button>
   );
 }

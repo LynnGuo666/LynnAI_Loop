@@ -7,6 +7,19 @@
   --loop-border: oklch(0.25 0.01 265);
   --loop-text: oklch(0.92 0.01 265);
   --loop-muted: oklch(0.6 0.02 265);
+  --loop-hover: rgb(255 255 255 / 0.05);
+  --loop-chart-grid: rgb(255 255 255 / 0.07);
+}
+
+:root[data-theme="light"] {
+  --loop-primary: oklch(0.55 0.22 265);
+  --loop-bg: oklch(0.97 0.01 265);
+  --loop-card: oklch(1 0 0);
+  --loop-border: oklch(0.88 0.02 265);
+  --loop-text: oklch(0.22 0.02 265);
+  --loop-muted: oklch(0.52 0.03 265);
+  --loop-hover: rgb(15 23 42 / 0.05);
+  --loop-chart-grid: rgb(15 23 42 / 0.09);
 }
 
 body {

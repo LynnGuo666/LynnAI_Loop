@@ -1,9 +1,15 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { getChannel, listKeysByChannel, createKey, deleteKey, enableKey, probeKey, getUsageTimeseries, updateChannel, updateKey, listChannelModels, exportKeys, importKeys } from "../api/client";
+import { getChannel, listKeysByChannel, createKey, deleteKey, enableKey, probeKey, getUsageTimeseries, updateChannel, updateKey, listChannelModels, exportKeys, importKeys, listUsage } from "../api/client";
 import { StatCard, DataTable, ConfirmDialog, KeyFormModal, KeyImportModal } from "../components/common";
-import type { Channel, APIKey, TimeseriesPoint, KeyProbe, KeyImportItem } from "../types";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import type { Channel, APIKey, TimeseriesPoint, KeyProbe, KeyImportItem, UsageLog } from "../types";
+import { AreaChart, Area, CartesianGrid, Line, LineChart, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+
+interface ChannelPerformancePoint {
+  time: string;
+  first_token_ms: number;
+  output_tokens_per_sec: number;
+}
 
 export function ChannelDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -20,11 +26,13 @@ export function ChannelDetailPage() {
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [modelLoading, setModelLoading] = useState(false);
   const [modelMsg, setModelMsg] = useState("");
+  const [performanceLogs, setPerformanceLogs] = useState<UsageLog[]>([]);
 
   const load = () => {
     getChannel(channelId).then(setChannel).catch(() => {});
     listKeysByChannel(channelId).then(setKeys).catch(() => {});
     getUsageTimeseries(7).then(setTimeseries).catch(() => {});
+    listUsage({ channel_id: channelId, page: 1, page_size: 100 }).then((r) => setPerformanceLogs(r.data || [])).catch(() => {});
   };
   useEffect(() => { load(); }, [channelId]);
   useEffect(() => {
@@ -148,6 +156,7 @@ export function ChannelDetailPage() {
     if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
     return String(n);
   };
+  const performanceData = buildPerformanceData(performanceLogs);
 
   if (!channel) return <div className="text-[var(--loop-muted)]">加载中...</div>;
 
@@ -201,6 +210,40 @@ export function ChannelDetailPage() {
         <StatCard label="密钥总数" value={keys.length} />
         <StatCard label="可用密钥" value={activeKeys} color="text-green-400" />
         <StatCard label="停用密钥" value={keys.length - activeKeys} color="text-red-400" />
+      </div>
+      <div className="rounded-xl border border-[var(--loop-border)] bg-[var(--loop-card)] p-6">
+        <div className="mb-4">
+          <h2 className="text-sm font-medium">请求性能</h2>
+          <p className="mt-1 text-xs text-[var(--loop-muted)]">基于此渠道最近 100 条业务请求，绘制首字耗时和输出速度。</p>
+        </div>
+        {performanceData.length > 0 ? (
+          <ResponsiveContainer width="100%" height={260}>
+            <LineChart data={performanceData}>
+              <CartesianGrid stroke="var(--loop-chart-grid)" vertical={false} />
+              <XAxis dataKey="time" tick={{ fill: "var(--loop-muted)", fontSize: 11 }} tickLine={false} axisLine={false} />
+              <YAxis yAxisId="latency" tick={{ fill: "var(--loop-muted)", fontSize: 11 }} tickLine={false} axisLine={false} />
+              <YAxis yAxisId="speed" orientation="right" tick={{ fill: "var(--loop-muted)", fontSize: 11 }} tickLine={false} axisLine={false} />
+              <Tooltip
+                contentStyle={{
+                  background: "var(--loop-card)",
+                  border: "1px solid var(--loop-border)",
+                  borderRadius: 8,
+                  color: "var(--loop-text)",
+                  fontSize: 12,
+                }}
+                labelStyle={{ color: "var(--loop-muted)" }}
+                formatter={(value, name) => [
+                  name === "首字" ? `${Math.round(Number(value))}ms` : `${Number(value).toFixed(1)} tok/s`,
+                  name,
+                ]}
+              />
+              <Line yAxisId="latency" type="monotone" dataKey="first_token_ms" name="首字" stroke="#6366f1" strokeWidth={2} dot={{ r: 2 }} />
+              <Line yAxisId="speed" type="monotone" dataKey="output_tokens_per_sec" name="输出速度" stroke="#0891b2" strokeWidth={2} dot={{ r: 2 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="h-48 flex items-center justify-center text-center text-sm text-[var(--loop-muted)]">暂无业务请求性能数据</div>
+        )}
       </div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <h2 className="text-lg font-semibold">API 密钥</h2>
@@ -273,6 +316,17 @@ export function ChannelDetailPage() {
       )}
     </div>
   );
+}
+
+function buildPerformanceData(logs: UsageLog[]): ChannelPerformancePoint[] {
+  return [...logs]
+    .reverse()
+    .filter((log) => log.first_token_ms > 0 || log.output_tokens_per_sec > 0)
+    .map((log) => ({
+      time: new Date(log.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      first_token_ms: log.first_token_ms,
+      output_tokens_per_sec: log.output_tokens_per_sec,
+    }));
 }
 
 function downloadJSON(data: unknown, filename: string) {
