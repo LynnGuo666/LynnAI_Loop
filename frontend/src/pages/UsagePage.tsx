@@ -1,16 +1,15 @@
-import { useEffect, useState } from "react";
-import { listUsage, getUsageStats, getUsageModels, listChannels, listAllKeys } from "../api/client";
-import { DataTable, StatCard } from "../components/common";
-import type { UsageLog, UsageStats, Channel, APIKey } from "../types";
+import { Fragment, useEffect, useState } from "react";
+import { listUsage, getUsageModels, listChannels, listAllKeys } from "../api/client";
+import type { UsageLog, Channel, APIKey } from "../types";
 
 export function UsagePage() {
   const [logs, setLogs] = useState<UsageLog[]>([]);
   const [total, setTotal] = useState(0);
-  const [stats, setStats] = useState<UsageStats | null>(null);
   const [models, setModels] = useState<string[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [keys, setKeys] = useState<APIKey[]>([]);
   const [page, setPage] = useState(1);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
   const [filters, setFilters] = useState({
     channel_id: "",
     api_key_id: "",
@@ -30,7 +29,6 @@ export function UsagePage() {
     if (filters.start_date) f.start_date = filters.start_date;
     if (filters.end_date) f.end_date = filters.end_date;
     listUsage(f as any).then((r) => { setLogs(r.data || []); setTotal(r.total); }).catch(() => {});
-    getUsageStats(filters.start_date || undefined, filters.end_date || undefined).then(setStats).catch(() => {});
   };
 
   useEffect(() => {
@@ -51,63 +49,6 @@ export function UsagePage() {
   const formatMs = (n?: number) => (n && n > 0 ? `${Math.round(n)}ms` : "-");
   const formatSpeed = (n?: number) => (n && n > 0 ? `${n.toFixed(1)} tok/s` : "-");
 
-  const columns = [
-    { key: "id", label: "ID" },
-    {
-      key: "channel_id",
-      label: "渠道",
-      render: (l: UsageLog) => channelMap.get(l.channel_id) || `#${l.channel_id}`,
-    },
-    {
-      key: "api_key_id",
-      label: "Key",
-      render: (l: UsageLog) => keyMap.get(l.api_key_id) || `#${l.api_key_id}`,
-    },
-    { key: "model", label: "模型" },
-    {
-      key: "input_tokens",
-      label: "输入",
-      render: (l: UsageLog) => formatTokens(l.input_tokens),
-    },
-    {
-      key: "output_tokens",
-      label: "输出",
-      render: (l: UsageLog) => formatTokens(l.output_tokens),
-    },
-    {
-      key: "cache_creation_tokens",
-      label: "缓存写",
-      render: (l: UsageLog) => formatTokens(l.cache_creation_tokens),
-    },
-    {
-      key: "cache_read_tokens",
-      label: "缓存读",
-      render: (l: UsageLog) => formatTokens(l.cache_read_tokens),
-    },
-    { key: "latency_ms", label: "延迟", render: (l: UsageLog) => `${l.latency_ms}ms` },
-    { key: "first_token_ms", label: "首字", render: (l: UsageLog) => formatMs(l.first_token_ms) },
-    {
-      key: "output_tokens_per_sec",
-      label: "输出速度",
-      render: (l: UsageLog) => formatSpeed(l.output_tokens_per_sec),
-    },
-    {
-      key: "success",
-      label: "状态",
-      render: (l: UsageLog) => (
-        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${l.success ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>
-          {l.success ? l.status_code : `错误 ${l.status_code}`}
-        </span>
-      ),
-    },
-    {
-      key: "is_stream",
-      label: "流式",
-      render: (l: UsageLog) => (l.is_stream ? "是" : "否"),
-    },
-    { key: "created_at", label: "时间", render: (l: UsageLog) => new Date(l.created_at).toLocaleString() },
-  ];
-
   const totalPages = Math.ceil(total / 20);
 
   return (
@@ -115,16 +56,6 @@ export function UsagePage() {
       <div>
         <h1 className="text-xl md:text-2xl font-bold">用量</h1>
         <p className="text-sm text-[var(--loop-muted)] mt-1">这里只统计外部业务请求；手动探测和自动恢复探测不计入用量。</p>
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
-        <StatCard label="请求总数" value={stats?.total_requests ?? 0} />
-        <StatCard label="输入令牌" value={formatTokens(stats?.total_input_tokens ?? 0)} />
-        <StatCard label="输出令牌" value={formatTokens(stats?.total_output_tokens ?? 0)} />
-        <StatCard label="缓存令牌" value={formatTokens(stats?.total_cache_tokens ?? 0)} />
-        <StatCard label="平均首字" value={formatMs(stats?.avg_first_token_ms)} />
-        <StatCard label="平均输出速度" value={formatSpeed(stats?.avg_output_tokens_per_sec)} />
-        <StatCard label="成功" value={stats?.success_count ?? 0} color="text-green-400" />
-        <StatCard label="失败" value={stats?.failure_count ?? 0} color="text-red-400" />
       </div>
       <div className="flex flex-wrap gap-2 md:gap-3">
         <select value={filters.channel_id} onChange={(e) => { setFilters({ ...filters, channel_id: e.target.value }); setPage(1); }}
@@ -148,7 +79,73 @@ export function UsagePage() {
         <input type="date" value={filters.end_date} onChange={(e) => { setFilters({ ...filters, end_date: e.target.value }); setPage(1); }}
           className="flex-1 min-w-[130px] px-3 py-2 rounded-xl bg-[var(--loop-card)] border border-[var(--loop-border)] text-[var(--loop-text)] text-sm" />
       </div>
-      <DataTable columns={columns} data={logs} empty="暂无用量记录" />
+      <div className="overflow-x-auto rounded-xl border border-[var(--loop-border)]">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-[var(--loop-border)] bg-[var(--loop-card)]">
+              <th className="px-3 md:px-4 py-3 text-left text-xs font-medium text-[var(--loop-muted)] uppercase tracking-wider">ID</th>
+              <th className="px-3 md:px-4 py-3 text-left text-xs font-medium text-[var(--loop-muted)] uppercase tracking-wider">渠道</th>
+              <th className="px-3 md:px-4 py-3 text-left text-xs font-medium text-[var(--loop-muted)] uppercase tracking-wider">Key</th>
+              <th className="px-3 md:px-4 py-3 text-left text-xs font-medium text-[var(--loop-muted)] uppercase tracking-wider">模型</th>
+              <th className="px-3 md:px-4 py-3 text-left text-xs font-medium text-[var(--loop-muted)] uppercase tracking-wider">延迟</th>
+              <th className="px-3 md:px-4 py-3 text-left text-xs font-medium text-[var(--loop-muted)] uppercase tracking-wider">性能</th>
+              <th className="px-3 md:px-4 py-3 text-left text-xs font-medium text-[var(--loop-muted)] uppercase tracking-wider">时间</th>
+              <th className="px-3 md:px-4 py-3 text-left text-xs font-medium text-[var(--loop-muted)] uppercase tracking-wider"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {logs.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="px-4 py-8 text-center text-[var(--loop-muted)]">暂无用量记录</td>
+              </tr>
+            ) : (
+              logs.map((log) => {
+                const expanded = expandedId === log.id;
+                return (
+                  <Fragment key={log.id}>
+                    <tr key={log.id} className="border-b border-[var(--loop-border)] hover:bg-white/[0.02]">
+                      <td className="px-3 md:px-4 py-3">{log.id}</td>
+                      <td className="px-3 md:px-4 py-3">{channelMap.get(log.channel_id) || `#${log.channel_id}`}</td>
+                      <td className="px-3 md:px-4 py-3">{keyMap.get(log.api_key_id) || `#${log.api_key_id}`}</td>
+                      <td className="px-3 md:px-4 py-3">{log.model}</td>
+                      <td className="px-3 md:px-4 py-3">{log.latency_ms}ms</td>
+                      <td className="px-3 md:px-4 py-3">
+                        <div>{formatMs(log.first_token_ms)}</div>
+                        <div className="text-xs text-[var(--loop-muted)]">{formatSpeed(log.output_tokens_per_sec)}</div>
+                      </td>
+                      <td className="px-3 md:px-4 py-3 whitespace-nowrap">{new Date(log.created_at).toLocaleString()}</td>
+                      <td className="px-3 md:px-4 py-3 text-right">
+                        <button
+                          onClick={() => setExpandedId(expanded ? null : log.id)}
+                          className="rounded-lg border border-[var(--loop-border)] px-2.5 py-1 text-xs hover:bg-white/5"
+                        >
+                          {expanded ? "收起" : "详情"}
+                        </button>
+                      </td>
+                    </tr>
+                    {expanded && (
+                      <tr key={`${log.id}-details`} className="border-b border-[var(--loop-border)] bg-white/[0.02]">
+                        <td colSpan={8} className="px-3 md:px-4 py-4">
+                          <div className="grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                            <DetailItem label="输入令牌" value={formatTokens(log.input_tokens)} />
+                            <DetailItem label="输出令牌" value={formatTokens(log.output_tokens)} />
+                            <DetailItem label="缓存写" value={formatTokens(log.cache_creation_tokens)} />
+                            <DetailItem label="缓存读" value={formatTokens(log.cache_read_tokens)} />
+                            <DetailItem label="状态" value={log.success ? `${log.status_code}` : `错误 ${log.status_code}`} tone={log.success ? "success" : "danger"} />
+                            <DetailItem label="流式" value={log.is_stream ? "是" : "否"} />
+                            <DetailItem label="端点" value={log.endpoint || "-"} />
+                            <DetailItem label="错误信息" value={log.error_message || "-"} tone={log.error_message ? "danger" : undefined} />
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
       {totalPages > 1 && (
         <div className="flex justify-center gap-2">
           <button onClick={() => setPage(Math.max(1, page - 1))} disabled={page <= 1}
@@ -158,6 +155,25 @@ export function UsagePage() {
             className="px-3 py-1.5 rounded-lg border border-[var(--loop-border)] text-sm disabled:opacity-30 hover:bg-white/5">下一页</button>
         </div>
       )}
+    </div>
+  );
+}
+
+function DetailItem({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: "success" | "danger";
+}) {
+  const toneClass = tone === "success" ? "text-green-400" : tone === "danger" ? "text-red-400" : "text-[var(--loop-text)]";
+
+  return (
+    <div className="min-w-0 rounded-lg border border-[var(--loop-border)] bg-[var(--loop-bg)] px-3 py-2">
+      <div className="text-[var(--loop-muted)]">{label}</div>
+      <div className={`mt-1 break-all font-medium ${toneClass}`}>{value}</div>
     </div>
   );
 }

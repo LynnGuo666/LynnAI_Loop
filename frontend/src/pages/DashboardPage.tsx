@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { listChannels, listAllKeys, getUsageStats, getUsageTimeseries } from "../api/client";
 import { StatCard } from "../components/common";
 import type { Channel, APIKey, UsageStats, TimeseriesPoint } from "../types";
@@ -19,6 +20,9 @@ export function DashboardPage() {
 
   const activeKeys = keys.filter((k) => k.is_active).length;
   const disabledKeys = keys.filter((k) => !k.is_active).length;
+  const hasUsageData = timeseries.some(
+    (point) => point.requests > 0 || point.input_tokens > 0 || point.output_tokens > 0
+  );
 
   const formatTokens = (n: number) => {
     if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -39,7 +43,7 @@ export function DashboardPage() {
       </div>
       <div className="rounded-xl border border-[var(--loop-border)] bg-[var(--loop-card)] p-6">
         <h2 className="text-sm font-medium text-[var(--loop-muted)] mb-4">近 7 天用量</h2>
-        {timeseries.length > 0 ? (
+        {hasUsageData ? (
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={timeseries}>
               <defs>
@@ -60,7 +64,26 @@ export function DashboardPage() {
             </AreaChart>
           </ResponsiveContainer>
         ) : (
-          <div className="h-64 flex items-center justify-center text-[var(--loop-muted)] text-sm">暂无数据</div>
+          <div className="h-64 flex flex-col items-center justify-center gap-4 text-center">
+            <div>
+              <div className="text-sm font-medium text-[var(--loop-text)]">还没有业务请求记录</div>
+              <div className="mt-1 text-xs text-[var(--loop-muted)]">产生用量后，这里会展示近 7 天的令牌趋势。</div>
+            </div>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Link
+                to="/usage"
+                className="rounded-lg border border-[var(--loop-border)] px-3 py-1.5 text-xs text-[var(--loop-text)] hover:bg-white/5"
+              >
+                查看用量明细
+              </Link>
+              <Link
+                to="/channels"
+                className="rounded-lg bg-[var(--loop-primary)] px-3 py-1.5 text-xs text-white hover:opacity-90"
+              >
+                查看渠道
+              </Link>
+            </div>
+          </div>
         )}
       </div>
     </div>
