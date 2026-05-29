@@ -50,11 +50,13 @@ func (r *UsageRepo) CreatePending(log *models.UsageLog) error {
 
 func (r *UsageRepo) UpdateCompleted(id int64, log *models.UsageLog) error {
 	_, err := r.db.Exec(
-		`UPDATE usage_logs SET input_tokens = ?, output_tokens = ?, cache_creation_tokens = ?,
+		`UPDATE usage_logs SET channel_id = ?, api_key_id = ?, model = ?, endpoint = ?, client_ip = ?,
+		        input_tokens = ?, output_tokens = ?, cache_creation_tokens = ?,
 		        cache_read_tokens = ?, is_stream = ?, status_code = ?, latency_ms = ?,
 		        first_token_ms = ?, output_tokens_per_sec = ?, success = ?, error_message = ?,
 		        status = ?
 		 WHERE id = ?`,
+		log.ChannelID, log.APIKeyID, log.Model, log.Endpoint, log.ClientIP,
 		log.InputTokens, log.OutputTokens, log.CacheCreationTokens, log.CacheReadTokens,
 		boolToInt(log.IsStream), log.StatusCode, log.LatencyMs, log.FirstTokenMs,
 		log.OutputTokensPerSec, boolToInt(log.Success), log.ErrorMessage, log.Status, id,

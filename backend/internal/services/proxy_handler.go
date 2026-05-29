@@ -109,29 +109,31 @@ func (ph *ProxyHandler) HandleMessages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var usageLogID int64
-	if ph.usageRepo != nil {
-		pendingLog := &models.UsageLog{
-			ChannelID: ch.ID,
-			APIKeyID:  0,
-			Model:     reqBody.Model,
-			Endpoint:  "/v1/messages",
-			ClientIP:  clientIP,
-			Status:    "pending",
-			CreatedAt: time.Now(),
-		}
-		if err := ph.usageRepo.CreatePending(pendingLog); err != nil {
-			log.Printf("usage log create pending error: channel=%d endpoint=/v1/messages err=%v", ch.ID, err)
-		} else {
-			usageLogID = pendingLog.ID
-		}
-	}
-
+	var lastKey *models.APIKey
 	var lastErr error
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		key, err := ph.rotator.Select(channelID)
 		if err != nil {
 			lastErr = err
 			break
+		}
+		lastKey = key
+
+		if ph.usageRepo != nil && usageLogID == 0 {
+			pendingLog := &models.UsageLog{
+				ChannelID: ch.ID,
+				APIKeyID:  key.ID,
+				Model:     reqBody.Model,
+				Endpoint:  "/v1/messages",
+				ClientIP:  clientIP,
+				Status:    "pending",
+				CreatedAt: time.Now(),
+			}
+			if err := ph.usageRepo.CreatePending(pendingLog); err != nil {
+				log.Printf("usage log create pending error: channel=%d key=%d endpoint=/v1/messages err=%v", ch.ID, key.ID, err)
+			} else {
+				usageLogID = pendingLog.ID
+			}
 		}
 
 		upstreamURL := strings.TrimRight(ch.BaseURL, "/") + "/v1/messages"
@@ -177,7 +179,16 @@ func (ph *ProxyHandler) HandleMessages(w http.ResponseWriter, r *http.Request) {
 		msg = "no_active_keys"
 	}
 	if usageLogID > 0 {
+		apiKeyID := int64(0)
+		if lastKey != nil {
+			apiKeyID = lastKey.ID
+		}
 		if err := ph.usageRepo.UpdateCompleted(usageLogID, &models.UsageLog{
+			ChannelID:    ch.ID,
+			APIKeyID:     apiKeyID,
+			Model:        reqBody.Model,
+			Endpoint:     "/v1/messages",
+			ClientIP:     clientIP,
 			Status:       "failed",
 			Success:      false,
 			ErrorMessage: msg,
