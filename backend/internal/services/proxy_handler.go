@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -118,8 +119,11 @@ func (ph *ProxyHandler) HandleMessages(w http.ResponseWriter, r *http.Request) {
 			Status:    "pending",
 			CreatedAt: time.Now(),
 		}
-		ph.usageRepo.CreatePending(pendingLog)
-		usageLogID = pendingLog.ID
+		if err := ph.usageRepo.CreatePending(pendingLog); err != nil {
+			log.Printf("usage log create pending error: channel=%d endpoint=/v1/messages err=%v", ch.ID, err)
+		} else {
+			usageLogID = pendingLog.ID
+		}
 	}
 
 	var lastErr error
@@ -173,11 +177,13 @@ func (ph *ProxyHandler) HandleMessages(w http.ResponseWriter, r *http.Request) {
 		msg = "no_active_keys"
 	}
 	if usageLogID > 0 {
-		ph.usageRepo.UpdateCompleted(usageLogID, &models.UsageLog{
+		if err := ph.usageRepo.UpdateCompleted(usageLogID, &models.UsageLog{
 			Status:       "failed",
 			Success:      false,
 			ErrorMessage: msg,
-		})
+		}); err != nil {
+			log.Printf("usage log update failed error: id=%d err=%v", usageLogID, err)
+		}
 	}
 	http.Error(w, fmt.Sprintf(`{"error":{"type":"proxy_error","message":"%s"}}`, msg), http.StatusBadGateway)
 }
@@ -349,7 +355,7 @@ func (ph *ProxyHandler) updateUsage(usageLogID int64, key *models.APIKey, ch *mo
 	if errMsg != "" {
 		status = "failed"
 	}
-	ph.usageRepo.UpdateCompleted(usageLogID, &models.UsageLog{
+	if err := ph.usageRepo.UpdateCompleted(usageLogID, &models.UsageLog{
 		ChannelID:           ch.ID,
 		APIKeyID:            key.ID,
 		Model:               model,
@@ -366,7 +372,9 @@ func (ph *ProxyHandler) updateUsage(usageLogID int64, key *models.APIKey, ch *mo
 		Success:             errMsg == "",
 		ErrorMessage:        errMsg,
 		Status:              status,
-	})
+	}); err != nil {
+		log.Printf("usage log update completed error: id=%d key=%d endpoint=%s err=%v", usageLogID, key.ID, endpoint, err)
+	}
 }
 
 func (ph *ProxyHandler) handleRetryableFailure(statusCode int, keyID int64) {

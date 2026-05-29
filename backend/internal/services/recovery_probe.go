@@ -96,27 +96,38 @@ func (rp *RecoveryProbe) probeOneKey(ctx context.Context, key models.APIKey) {
 		return
 	}
 
-	rp.recordProbeUsage(&key, &probe, respBody)
-
-	if !probe.Success {
-		rp.recordProbeFailure(key, probe)
+	if err := rp.recordProbeUsage(&key, &probe, respBody); err != nil {
+		log.Printf("probe: key %d usage log error: %v", key.ID, err)
 		return
 	}
 
-	rp.probeRepo.Create(&probe)
+	if !probe.Success {
+		if err := rp.recordProbeFailure(key, probe); err != nil {
+			log.Printf("probe: key %d failure record error: %v", key.ID, err)
+		}
+		return
+	}
+
+	if err := rp.probeRepo.Create(&probe); err != nil {
+		log.Printf("probe: key %d history insert error: %v", key.ID, err)
+		return
+	}
 
 	key.IsActive = true
 	key.ConsecutiveFailures = 0
 	key.DisabledAt = nil
 	key.NextProbeAt = nil
 	key.ProbeBackoffMin = rp.cfg.ProbeBackoffBaseMin
-	rp.keyRepo.Update(&key)
+	if err := rp.keyRepo.Update(&key); err != nil {
+		log.Printf("probe: key %d re-enable update error: %v", key.ID, err)
+		return
+	}
 	log.Printf("key %d re-enabled after probe success", key.ID)
 }
 
-func (rp *RecoveryProbe) recordProbeUsage(key *models.APIKey, probe *models.KeyProbe, respBody []byte) {
+func (rp *RecoveryProbe) recordProbeUsage(key *models.APIKey, probe *models.KeyProbe, respBody []byte) error {
 	if rp.usageRepo == nil {
-		return
+		return nil
 	}
 	var inputTokens, outputTokens int64
 	if probe.Success && len(respBody) > 0 {
@@ -128,7 +139,7 @@ func (rp *RecoveryProbe) recordProbeUsage(key *models.APIKey, probe *models.KeyP
 	if !probe.Success {
 		status = "failed"
 	}
-	rp.usageRepo.Create(&models.UsageLog{
+	if err := rp.usageRepo.Create(&models.UsageLog{
 		ChannelID:    key.ChannelID,
 		APIKeyID:     key.ID,
 		Model:        "",
@@ -142,12 +153,17 @@ func (rp *RecoveryProbe) recordProbeUsage(key *models.APIKey, probe *models.KeyP
 		ErrorMessage: probe.ErrorMsg,
 		Status:       status,
 		CreatedAt:    time.Now(),
-	})
+	}); err != nil {
+		return fmt.Errorf("记录探测用量失败: %w", err)
+	}
+	return nil
 }
 
-func (rp *RecoveryProbe) recordProbeFailure(key models.APIKey, probe models.KeyProbe) {
+func (rp *RecoveryProbe) recordProbeFailure(key models.APIKey, probe models.KeyProbe) error {
 	probe.Success = false
-	rp.probeRepo.Create(&probe)
+	if err := rp.probeRepo.Create(&probe); err != nil {
+		return fmt.Errorf("记录探测历史失败: %w", err)
+	}
 
 	nextBackoff := key.ProbeBackoffMin * 2
 	if nextBackoff > rp.cfg.ProbeBackoffMaxMin {
@@ -156,8 +172,11 @@ func (rp *RecoveryProbe) recordProbeFailure(key models.APIKey, probe models.KeyP
 	key.ProbeBackoffMin = nextBackoff
 	nextProbe := time.Now().Add(time.Duration(nextBackoff) * time.Minute)
 	key.NextProbeAt = &nextProbe
-	rp.keyRepo.Update(&key)
+	if err := rp.keyRepo.Update(&key); err != nil {
+		return fmt.Errorf("更新探测退避状态失败: %w", err)
+	}
 	log.Printf("key %d probe failed, next probe in %d min", key.ID, nextBackoff)
+	return nil
 }
 
 func (rp *RecoveryProbe) ProbeSingleKey(ctx context.Context, keyID int64) (*models.KeyProbe, error) {
@@ -176,13 +195,19 @@ func (rp *RecoveryProbe) ProbeSingleKeyWithOptions(ctx context.Context, keyID in
 		return nil, false, err
 	}
 
-	rp.recordProbeUsage(key, &probe, respBody)
+	if err := rp.recordProbeUsage(key, &probe, respBody); err != nil {
+		return &probe, false, err
+	}
 
 	if !probe.Success {
 		if isAuthFailure(probe.StatusCode) {
-			rp.recordProbeFailure(*key, probe)
+			if err := rp.recordProbeFailure(*key, probe); err != nil {
+				return &probe, false, err
+			}
 		} else {
-			rp.probeRepo.Create(&probe)
+			if err := rp.probeRepo.Create(&probe); err != nil {
+				return &probe, false, fmt.Errorf("记录探测历史失败: %w", err)
+			}
 		}
 		if opts.DeleteOn401 && deleteable401 {
 			if err := rp.keyRepo.Delete(key.ID); err != nil {
@@ -193,7 +218,9 @@ func (rp *RecoveryProbe) ProbeSingleKeyWithOptions(ctx context.Context, keyID in
 		return &probe, false, nil
 	}
 
-	rp.probeRepo.Create(&probe)
+	if err := rp.probeRepo.Create(&probe); err != nil {
+		return &probe, false, fmt.Errorf("记录探测历史失败: %w", err)
+	}
 
 	if !key.IsActive {
 		key.IsActive = true
@@ -201,7 +228,9 @@ func (rp *RecoveryProbe) ProbeSingleKeyWithOptions(ctx context.Context, keyID in
 		key.DisabledAt = nil
 		key.NextProbeAt = nil
 		key.ProbeBackoffMin = rp.cfg.ProbeBackoffBaseMin
-		rp.keyRepo.Update(key)
+		if err := rp.keyRepo.Update(key); err != nil {
+			return &probe, false, fmt.Errorf("更新密钥恢复状态失败: %w", err)
+		}
 	}
 
 	return &probe, false, nil
