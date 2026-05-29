@@ -47,6 +47,18 @@ export function SettingsPage() {
           </CardBody>
         </Card>
         <Card>
+          <CardBody className="p-4 flex items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-medium">401 自动删除密钥</div>
+              <div className="text-xs text-default-500 mt-1">模型调用请求收到上游 401 时，自动删除对应 API 密钥</div>
+            </div>
+            <Switch
+              isSelected={settings.auto_delete_401_keys_enabled === "true"}
+              onValueChange={(v: boolean) => setSettings({ ...settings, auto_delete_401_keys_enabled: String(v) })}
+            />
+          </CardBody>
+        </Card>
+        <Card>
           <CardBody className="p-4">
             <div className="text-sm font-medium">自动停用阈值</div>
             <div className="text-xs text-default-500 mt-1 mb-3">密钥连续失败达到该次数后会被自动停用</div>

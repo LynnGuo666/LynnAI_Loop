@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { getChannel, listKeysByChannel, createKey, deleteKey, enableKey, probeKey, getUsageTimeseries, updateChannel, updateKey, listChannelModels, exportKeys, importKeys, listUsage } from "../api/client";
+import { getChannel, listKeysByChannel, createKey, deleteKey, enableKey, probeKey, probeKeys, getUsageTimeseries, updateChannel, updateKey, listChannelModels, exportKeys, importKeys, listUsage } from "../api/client";
 import { StatCard, DataTable, ConfirmDialog, KeyFormModal, KeyImportModal } from "../components/common";
-import type { Channel, APIKey, TimeseriesPoint, KeyProbe, KeyImportItem, UsageLog } from "../types";
+import type { Channel, APIKey, TimeseriesPoint, KeyProbe, KeyProbeBatchResponse, KeyImportItem, UsageLog } from "../types";
 import { AreaChart, Area, CartesianGrid, Line, LineChart, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import {
   Card,
@@ -37,6 +37,10 @@ export function ChannelDetailPage() {
   const [editingKey, setEditingKey] = useState<APIKey | null>(null);
   const [delKeyId, setDelKeyId] = useState<number | null>(null);
   const [probeResult, setProbeResult] = useState<KeyProbe | null>(null);
+  const [batchProbeResult, setBatchProbeResult] = useState<KeyProbeBatchResponse | null>(null);
+  const [probingKeyId, setProbingKeyId] = useState<number | null>(null);
+  const [batchProbing, setBatchProbing] = useState(false);
+  const [showBatchProbeConfirm, setShowBatchProbeConfirm] = useState(false);
   const [probeModel, setProbeModel] = useState("");
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [modelLoading, setModelLoading] = useState(false);
@@ -96,9 +100,33 @@ export function ChannelDetailPage() {
   };
 
   const handleProbe = async (keyId: number) => {
-    const result = await probeKey(keyId);
-    setProbeResult(result);
-    load();
+    setProbingKeyId(keyId);
+    try {
+      const result = await probeKey(keyId);
+      setProbeResult(result);
+      load();
+    } finally {
+      setProbingKeyId(null);
+    }
+  };
+
+  const handleBatchProbe = async () => {
+    if (keys.length === 0) return;
+    setShowBatchProbeConfirm(true);
+  };
+
+  const executeBatchProbe = async (deleteOn401: boolean) => {
+    const ids = keys.map((k) => k.id);
+    if (ids.length === 0) return;
+    setShowBatchProbeConfirm(false);
+    setBatchProbing(true);
+    try {
+      const result = await probeKeys(ids, deleteOn401);
+      setBatchProbeResult(result);
+      load();
+    } finally {
+      setBatchProbing(false);
+    }
   };
 
   const handleLoadModels = async () => {
@@ -159,7 +187,15 @@ export function ChannelDetailPage() {
             <Button size="sm" variant="light" color="success" onPress={() => handleEnable(k.id)}>启用</Button>
           )}
           <Button size="sm" variant="light" color="primary" onPress={() => setEditingKey(k)}>编辑</Button>
-          <Button size="sm" variant="light" onPress={() => handleProbe(k.id)}>探测</Button>
+          <Button
+            size="sm"
+            variant="light"
+            isLoading={probingKeyId === k.id}
+            isDisabled={batchProbing}
+            onPress={() => handleProbe(k.id)}
+          >
+            探测
+          </Button>
           <Button size="sm" variant="light" color="danger" onPress={() => setDelKeyId(k.id)}>删除</Button>
         </div>
       ),
@@ -282,6 +318,15 @@ export function ChannelDetailPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <h2 className="text-lg font-semibold">API 密钥</h2>
         <div className="flex flex-wrap gap-2 sm:gap-3">
+          <Button
+            variant="bordered"
+            size="sm"
+            isLoading={batchProbing}
+            isDisabled={keys.length === 0}
+            onPress={handleBatchProbe}
+          >
+            批量探测（{keys.length}）
+          </Button>
           <Button color="primary" onPress={() => setShowAddKey(true)}>
             + 添加密钥
           </Button>
@@ -356,6 +401,76 @@ export function ChannelDetailPage() {
           </ModalBody>
           <ModalFooter>
             <Button variant="flat" onPress={() => setProbeResult(null)}>关闭</Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+      <Modal isOpen={batchProbeResult !== null} onOpenChange={(isOpen) => !isOpen && setBatchProbeResult(null)} size="2xl">
+        <ModalContent>
+          <ModalHeader>批量探测结果</ModalHeader>
+          <ModalBody>
+            <div className="space-y-4 text-sm">
+              <div className="flex flex-wrap gap-2">
+                <Chip size="sm" variant="flat">总数：{batchProbeResult?.total || 0}</Chip>
+                <Chip size="sm" variant="flat" color="success">成功：{batchProbeResult?.success || 0}</Chip>
+                <Chip size="sm" variant="flat" color="danger">失败：{batchProbeResult?.failed || 0}</Chip>
+                <Chip size="sm" variant="flat" color="warning">
+                  已删除：{batchProbeResult?.results.filter((result) => result.deleted).length || 0}
+                </Chip>
+              </div>
+              <div className="max-h-80 overflow-auto space-y-2">
+                {batchProbeResult?.results.map((result) => {
+                  const key = keys.find((item) => item.id === result.id);
+                  const success = Boolean(result.probe?.success);
+                  return (
+                    <div key={result.id} className="flex flex-col gap-1 rounded-small border border-default-200 p-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">{key?.alias || `#${result.id}`}</span>
+                        <span className="font-mono text-xs text-default-500">{key ? maskKey(key.key_value) : ""}</span>
+                        <Chip size="sm" variant="flat" color={success ? "success" : "danger"}>
+                          {success ? "成功" : "失败"}
+                        </Chip>
+                        {result.deleted && (
+                          <Chip size="sm" variant="flat" color="warning">
+                            已删除
+                          </Chip>
+                        )}
+                      </div>
+                      <div className="text-xs text-default-500">
+                        状态码：{result.probe?.status_code ?? "-"}，延迟：{result.probe?.latency_ms ?? 0}ms
+                      </div>
+                      {(result.error || result.probe?.error_msg) && (
+                        <div className="text-xs text-danger">{result.error || result.probe?.error_msg}</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="flat" onPress={() => setBatchProbeResult(null)}>关闭</Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+      <Modal isOpen={showBatchProbeConfirm} onOpenChange={(isOpen) => !isOpen && setShowBatchProbeConfirm(false)} size="md">
+        <ModalContent>
+          <ModalHeader>批量探测</ModalHeader>
+          <ModalBody>
+            <div className="space-y-2 text-sm text-default-500">
+              <p>将探测当前渠道的 {keys.length} 个密钥。</p>
+              <p>选择“探测并删除 401”后，只有真正探测请求返回上游 401 的密钥会被删除；获取模型列表返回 401 不会删除。</p>
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="flat" onPress={() => setShowBatchProbeConfirm(false)}>
+              取消
+            </Button>
+            <Button variant="bordered" onPress={() => executeBatchProbe(false)}>
+              仅探测
+            </Button>
+            <Button color="danger" onPress={() => executeBatchProbe(true)}>
+              探测并删除 401
+            </Button>
           </ModalFooter>
         </ModalContent>
       </Modal>

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"loop/internal/config"
 	"loop/internal/db"
+	"loop/internal/models"
 	"loop/internal/repo"
 	"loop/internal/services"
 )
@@ -49,6 +51,9 @@ func (s *Server) Run() error {
 	if v, _ := settingsRepo.Get("auto_disable_threshold"); v == "" {
 		settingsRepo.Set("auto_disable_threshold", fmt.Sprintf("%d", s.cfg.DisableThreshold))
 	}
+	if v, _ := settingsRepo.Get("auto_delete_401_keys_enabled"); v == "" {
+		settingsRepo.Set("auto_delete_401_keys_enabled", "false")
+	}
 
 	// Generate admin token if not set
 	adminToken := s.cfg.AdminToken
@@ -61,7 +66,7 @@ func (s *Server) Run() error {
 	}
 
 	rotator := services.NewKeyRotator(keyRepo, s.cfg)
-	proxy := services.NewProxyHandler(rotator, channelRepo, usageRepo, s.cfg)
+	proxy := services.NewProxyHandler(rotator, channelRepo, usageRepo, settingsRepo, s.cfg)
 	recoveryProbe := services.NewRecoveryProbe(keyRepo, probeRepo, settingsRepo, channelRepo, usageRepo, s.cfg)
 
 	// Start recovery probe
@@ -121,6 +126,65 @@ func probeKeyHandler(w http.ResponseWriter, r *http.Request, rp *services.Recove
 		return
 	}
 	writeJSON(w, 200, probe)
+}
+
+type probeKeysRequest struct {
+	IDs         []int64 `json:"ids"`
+	DeleteOn401 bool    `json:"delete_on_401"`
+}
+
+type probeKeysResult struct {
+	ID      int64            `json:"id"`
+	Probe   *models.KeyProbe `json:"probe,omitempty"`
+	Error   string           `json:"error,omitempty"`
+	Deleted bool             `json:"deleted"`
+}
+
+type probeKeysResponse struct {
+	Total   int               `json:"total"`
+	Success int               `json:"success"`
+	Failed  int               `json:"failed"`
+	Results []probeKeysResult `json:"results"`
+}
+
+func probeKeysHandler(w http.ResponseWriter, r *http.Request, rp *services.RecoveryProbe) {
+	var input probeKeysRequest
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeError(w, 400, "invalid request body")
+		return
+	}
+	if len(input.IDs) == 0 {
+		writeError(w, 400, "ids are required")
+		return
+	}
+
+	seen := make(map[int64]bool, len(input.IDs))
+	results := make([]probeKeysResult, 0, len(input.IDs))
+	for _, id := range input.IDs {
+		if id <= 0 || seen[id] {
+			continue
+		}
+		seen[id] = true
+
+		probe, deleted, err := rp.ProbeSingleKeyWithOptions(r.Context(), id, services.ProbeSingleKeyOptions{
+			DeleteOn401: input.DeleteOn401,
+		})
+		result := probeKeysResult{ID: id, Probe: probe, Deleted: deleted}
+		if err != nil {
+			result.Error = err.Error()
+		}
+		results = append(results, result)
+	}
+
+	resp := probeKeysResponse{Total: len(results), Results: results}
+	for _, result := range results {
+		if result.Probe != nil && result.Probe.Success {
+			resp.Success++
+			continue
+		}
+		resp.Failed++
+	}
+	writeJSON(w, 200, resp)
 }
 
 var _ = hashToken

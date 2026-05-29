@@ -32,6 +32,10 @@ type upstreamModelsResponse struct {
 	} `json:"data"`
 }
 
+type ProbeSingleKeyOptions struct {
+	DeleteOn401 bool
+}
+
 func NewRecoveryProbe(keyRepo *repo.APIKeyRepo, probeRepo *repo.KeyProbeRepo, settingsRepo *repo.SettingsRepo, channelRepo *repo.ChannelRepo, usageRepo *repo.UsageRepo, cfg config.Config) *RecoveryProbe {
 	return &RecoveryProbe{
 		keyRepo:      keyRepo,
@@ -86,7 +90,7 @@ func (rp *RecoveryProbe) runProbeCycle(ctx context.Context) {
 func (rp *RecoveryProbe) probeOneKey(ctx context.Context, key models.APIKey) {
 	log.Printf("probing key %d (alias=%s)", key.ID, key.Alias)
 
-	probe, respBody, err := rp.runProbe(ctx, &key)
+	probe, respBody, _, err := rp.runProbe(ctx, &key)
 	if err != nil {
 		log.Printf("probe: key %d error: %v", key.ID, err)
 		return
@@ -157,14 +161,19 @@ func (rp *RecoveryProbe) recordProbeFailure(key models.APIKey, probe models.KeyP
 }
 
 func (rp *RecoveryProbe) ProbeSingleKey(ctx context.Context, keyID int64) (*models.KeyProbe, error) {
+	probe, _, err := rp.ProbeSingleKeyWithOptions(ctx, keyID, ProbeSingleKeyOptions{})
+	return probe, err
+}
+
+func (rp *RecoveryProbe) ProbeSingleKeyWithOptions(ctx context.Context, keyID int64, opts ProbeSingleKeyOptions) (*models.KeyProbe, bool, error) {
 	key, err := rp.keyRepo.GetByID(keyID)
 	if err != nil {
-		return nil, fmt.Errorf("key not found: %w", err)
+		return nil, false, fmt.Errorf("key not found: %w", err)
 	}
 
-	probe, respBody, err := rp.runProbe(ctx, key)
+	probe, respBody, deleteable401, err := rp.runProbe(ctx, key)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	rp.recordProbeUsage(key, &probe, respBody)
@@ -175,7 +184,13 @@ func (rp *RecoveryProbe) ProbeSingleKey(ctx context.Context, keyID int64) (*mode
 		} else {
 			rp.probeRepo.Create(&probe)
 		}
-		return &probe, nil
+		if opts.DeleteOn401 && deleteable401 {
+			if err := rp.keyRepo.Delete(key.ID); err != nil {
+				return &probe, false, err
+			}
+			return &probe, true, nil
+		}
+		return &probe, false, nil
 	}
 
 	rp.probeRepo.Create(&probe)
@@ -189,10 +204,10 @@ func (rp *RecoveryProbe) ProbeSingleKey(ctx context.Context, keyID int64) (*mode
 		rp.keyRepo.Update(key)
 	}
 
-	return &probe, nil
+	return &probe, false, nil
 }
 
-func (rp *RecoveryProbe) runProbe(ctx context.Context, key *models.APIKey) (models.KeyProbe, []byte, error) {
+func (rp *RecoveryProbe) runProbe(ctx context.Context, key *models.APIKey) (models.KeyProbe, []byte, bool, error) {
 	probe := models.KeyProbe{
 		APIKeyID:  key.ID,
 		CreatedAt: time.Now(),
@@ -200,7 +215,7 @@ func (rp *RecoveryProbe) runProbe(ctx context.Context, key *models.APIKey) (mode
 
 	ch, err := rp.channelRepo.GetByID(key.ChannelID)
 	if err != nil {
-		return probe, nil, err
+		return probe, nil, false, err
 	}
 
 	modelID := strings.TrimSpace(ch.ProbeModel)
@@ -209,12 +224,12 @@ func (rp *RecoveryProbe) runProbe(ctx context.Context, key *models.APIKey) (mode
 		models, probe.StatusCode, probe.LatencyMs, err = rp.fetchProbeModels(ctx, ch, key)
 		if err != nil {
 			probe.ErrorMsg = err.Error()
-			return probe, nil, nil
+			return probe, nil, false, nil
 		}
 		modelID = chooseProbeModel(models)
 		if modelID == "" {
 			probe.ErrorMsg = "未配置探测模型，且 /v1/models 没有返回可用模型"
-			return probe, nil, nil
+			return probe, nil, false, nil
 		}
 	}
 
@@ -223,11 +238,11 @@ func (rp *RecoveryProbe) runProbe(ctx context.Context, key *models.APIKey) (mode
 	probe.LatencyMs = latency
 	if err != nil {
 		probe.ErrorMsg = err.Error()
-		return probe, respBody, nil
+		return probe, respBody, statusCode == http.StatusUnauthorized, nil
 	}
 
 	probe.Success = true
-	return probe, respBody, nil
+	return probe, respBody, false, nil
 }
 
 func (rp *RecoveryProbe) fetchProbeModels(ctx context.Context, ch *models.Channel, key *models.APIKey) ([]string, int, int64, error) {

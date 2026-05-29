@@ -80,6 +80,20 @@ export interface KeyProbe {
   created_at: string;
 }
 
+export interface KeyProbeBatchResult {
+  id: number;
+  probe?: KeyProbe;
+  error?: string;
+  deleted: boolean;
+}
+
+export interface KeyProbeBatchResponse {
+  total: number;
+  success: number;
+  failed: number;
+  results: KeyProbeBatchResult[];
+}
+
 export interface KeyImportItem {
   channel_id?: number;
   key_value: string;

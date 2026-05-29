@@ -22,20 +22,22 @@ import (
 var ErrNoActiveKeys = errors.New("no_active_keys")
 
 type ProxyHandler struct {
-	rotator     *KeyRotator
-	channelRepo *repo.ChannelRepo
-	usageRepo   *repo.UsageRepo
-	cfg         config.Config
-	client      *http.Client
+	rotator      *KeyRotator
+	channelRepo  *repo.ChannelRepo
+	usageRepo    *repo.UsageRepo
+	settingsRepo *repo.SettingsRepo
+	cfg          config.Config
+	client       *http.Client
 }
 
-func NewProxyHandler(rotator *KeyRotator, channelRepo *repo.ChannelRepo, usageRepo *repo.UsageRepo, cfg config.Config) *ProxyHandler {
+func NewProxyHandler(rotator *KeyRotator, channelRepo *repo.ChannelRepo, usageRepo *repo.UsageRepo, settingsRepo *repo.SettingsRepo, cfg config.Config) *ProxyHandler {
 	return &ProxyHandler{
-		rotator:     rotator,
-		channelRepo: channelRepo,
-		usageRepo:   usageRepo,
-		cfg:         cfg,
-		client:      &http.Client{Timeout: time.Duration(cfg.UpstreamTimeoutSec) * time.Second},
+		rotator:      rotator,
+		channelRepo:  channelRepo,
+		usageRepo:    usageRepo,
+		settingsRepo: settingsRepo,
+		cfg:          cfg,
+		client:       &http.Client{Timeout: time.Duration(cfg.UpstreamTimeoutSec) * time.Second},
 	}
 }
 
@@ -229,7 +231,7 @@ func (ph *ProxyHandler) handleStreamResponse(w http.ResponseWriter, resp *http.R
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if shouldRetry(resp.StatusCode) {
-			ph.rotator.ReportFailure(key.ID)
+			ph.handleRetryableFailure(resp.StatusCode, key.ID)
 			return fmt.Errorf("upstream %d", resp.StatusCode)
 		}
 		latency := time.Since(startTime).Milliseconds()
@@ -312,7 +314,7 @@ func (ph *ProxyHandler) handleNonStreamResponse(w http.ResponseWriter, resp *htt
 
 	if resp.StatusCode != http.StatusOK {
 		if shouldRetry(resp.StatusCode) {
-			ph.rotator.ReportFailure(key.ID)
+			ph.handleRetryableFailure(resp.StatusCode, key.ID)
 			return fmt.Errorf("upstream %d", resp.StatusCode)
 		}
 		latency := time.Since(startTime).Milliseconds()
@@ -365,6 +367,22 @@ func (ph *ProxyHandler) updateUsage(usageLogID int64, key *models.APIKey, ch *mo
 		ErrorMessage:        errMsg,
 		Status:              status,
 	})
+}
+
+func (ph *ProxyHandler) handleRetryableFailure(statusCode int, keyID int64) {
+	if statusCode == http.StatusUnauthorized && ph.autoDeleteUnauthorizedKeys() {
+		ph.rotator.DeleteKey(keyID)
+		return
+	}
+	ph.rotator.ReportFailure(keyID)
+}
+
+func (ph *ProxyHandler) autoDeleteUnauthorizedKeys() bool {
+	if ph.settingsRepo == nil {
+		return false
+	}
+	value, err := ph.settingsRepo.Get("auto_delete_401_keys_enabled")
+	return err == nil && value == "true"
 }
 
 func shouldRetry(statusCode int) bool {

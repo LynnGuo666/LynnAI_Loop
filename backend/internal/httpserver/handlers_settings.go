@@ -41,9 +41,10 @@ func (sh *SettingsHandlers) UpdateSettings(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	allowed := map[string]bool{
-		"recovery_probe_enabled": true,
-		"auto_disable_threshold": true,
-		"admin_token":            true,
+		"recovery_probe_enabled":       true,
+		"auto_disable_threshold":       true,
+		"auto_delete_401_keys_enabled": true,
+		"admin_token":                  true,
 	}
 	for k, v := range input {
 		if !allowed[k] {

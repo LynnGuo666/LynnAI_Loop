@@ -5,6 +5,7 @@ import type {
   UsageStats,
   TimeseriesPoint,
   KeyProbe,
+  KeyProbeBatchResponse,
   KeyExportResponse,
   KeyImportItem,
   KeyImportResponse,
@@ -107,6 +108,11 @@ export const enableKey = (id: number) =>
   request<APIKey>(`/api/keys/${id}/enable`, { method: "POST" });
 export const probeKey = (id: number) =>
   request<KeyProbe>(`/api/keys/${id}/probe`, { method: "POST" });
+export const probeKeys = (ids: number[], deleteOn401 = false) =>
+  request<KeyProbeBatchResponse>("/api/keys/probe", {
+    method: "POST",
+    body: JSON.stringify({ ids, delete_on_401: deleteOn401 }),
+  });
 
 // Usage
 export interface UsageFilter {

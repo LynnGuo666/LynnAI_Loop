@@ -53,6 +53,10 @@ func (kr *KeyRotator) ReportFailure(keyID int64) {
 	kr.keyRepo.RecordFailure(keyID, kr.cfg.DisableThreshold)
 }
 
+func (kr *KeyRotator) DeleteKey(keyID int64) {
+	kr.keyRepo.Delete(keyID)
+}
+
 func (kr *KeyRotator) ActiveKeyCount(channelID int64) (int, error) {
 	keys, err := kr.keyRepo.ListActiveByChannel(channelID)
 	if err != nil {
