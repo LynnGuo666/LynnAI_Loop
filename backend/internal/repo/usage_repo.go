@@ -245,6 +245,107 @@ func buildStatsWhere(startDate, endDate string) (string, []interface{}) {
 	return "WHERE " + strings.Join(conds, " AND "), args
 }
 
+type ModelStats struct {
+	Model        string  `json:"model"`
+	Requests     int64   `json:"requests"`
+	InputTokens  int64   `json:"input_tokens"`
+	OutputTokens int64   `json:"output_tokens"`
+	AvgLatencyMs float64 `json:"avg_latency_ms"`
+}
+
+func (r *UsageRepo) ModelStatsByDate(startDate, endDate string) ([]ModelStats, error) {
+	var conds []string
+	var args []interface{}
+	conds = append(conds, "model != ''")
+	if startDate != "" {
+		conds = append(conds, "created_at >= ?")
+		args = append(args, startDate)
+	}
+	if endDate != "" {
+		conds = append(conds, "created_at <= ?")
+		args = append(args, endDate+" 23:59:59")
+	}
+	where := "WHERE " + strings.Join(conds, " AND ")
+
+	rows, err := r.db.Query(
+		`SELECT model, COUNT(*), COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0),
+		        COALESCE(AVG(NULLIF(latency_ms, 0)),0)
+		 FROM usage_logs `+where+`
+		 GROUP BY model ORDER BY COUNT(*) DESC`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	stats := make([]ModelStats, 0)
+	for rows.Next() {
+		var s ModelStats
+		if err := rows.Scan(&s.Model, &s.Requests, &s.InputTokens, &s.OutputTokens, &s.AvgLatencyMs); err != nil {
+			return nil, err
+		}
+		stats = append(stats, s)
+	}
+	return stats, rows.Err()
+}
+
+type ChannelStats struct {
+	ChannelID    int64   `json:"channel_id"`
+	ChannelName  string  `json:"channel_name"`
+	Requests     int64   `json:"requests"`
+	SuccessCount int64   `json:"success_count"`
+	FailureCount int64   `json:"failure_count"`
+	SuccessRate  float64 `json:"success_rate"`
+	InputTokens  int64   `json:"input_tokens"`
+	OutputTokens int64   `json:"output_tokens"`
+	AvgLatencyMs float64 `json:"avg_latency_ms"`
+}
+
+func (r *UsageRepo) ChannelStatsByDate(startDate, endDate string) ([]ChannelStats, error) {
+	var conds []string
+	var args []interface{}
+	if startDate != "" {
+		conds = append(conds, "u.created_at >= ?")
+		args = append(args, startDate)
+	}
+	if endDate != "" {
+		conds = append(conds, "u.created_at <= ?")
+		args = append(args, endDate+" 23:59:59")
+	}
+	where := ""
+	if len(conds) > 0 {
+		where = "WHERE " + strings.Join(conds, " AND ")
+	}
+
+	rows, err := r.db.Query(
+		`SELECT u.channel_id, c.name,
+		        COUNT(*),
+		        COALESCE(SUM(CASE WHEN u.success=1 THEN 1 ELSE 0 END),0),
+		        COALESCE(SUM(CASE WHEN u.success=0 THEN 1 ELSE 0 END),0),
+		        COALESCE(SUM(u.input_tokens),0), COALESCE(SUM(u.output_tokens),0),
+		        COALESCE(AVG(NULLIF(u.latency_ms, 0)),0)
+		 FROM usage_logs u JOIN channels c ON c.id = u.channel_id
+		 `+where+`
+		 GROUP BY u.channel_id ORDER BY COUNT(*) DESC`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	stats := make([]ChannelStats, 0)
+	for rows.Next() {
+		var s ChannelStats
+		if err := rows.Scan(&s.ChannelID, &s.ChannelName, &s.Requests, &s.SuccessCount, &s.FailureCount,
+			&s.InputTokens, &s.OutputTokens, &s.AvgLatencyMs); err != nil {
+			return nil, err
+		}
+		if s.Requests > 0 {
+			s.SuccessRate = float64(s.SuccessCount) / float64(s.Requests) * 100
+		}
+		stats = append(stats, s)
+	}
+	return stats, rows.Err()
+}
+
 func (r *UsageRepo) TodayRequestCount() (int64, error) {
 	var count int64
 	err := r.db.QueryRow(`SELECT COUNT(*) FROM usage_logs WHERE date(created_at) = date('now')`).Scan(&count)

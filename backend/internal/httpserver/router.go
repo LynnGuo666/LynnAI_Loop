@@ -60,6 +60,8 @@ func NewRouter(h *Handlers, sh *SettingsHandlers, proxy *services.ProxyHandler, 
 		r.Get("/api/usage", h.ListUsage)
 		r.Get("/api/usage/stats", h.UsageStats)
 		r.Get("/api/usage/timeseries", h.UsageTimeseries)
+		r.Get("/api/usage/model-stats", h.UsageModelStats)
+		r.Get("/api/usage/channel-stats", h.UsageChannelStats)
 		r.Get("/api/usage/models", h.UsageModels)
 
 		// Settings

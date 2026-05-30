@@ -15,6 +15,7 @@ const links = [
   { to: "/channels", label: "渠道" },
   { to: "/keys", label: "密钥" },
   { to: "/usage", label: "用量" },
+  { to: "/statistics", label: "统计" },
   { to: "/settings", label: "设置" },
 ];
 

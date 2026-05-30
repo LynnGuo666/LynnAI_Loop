@@ -65,6 +65,26 @@ func (h *Handlers) UsageTimeseries(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, points)
 }
 
+func (h *Handlers) UsageModelStats(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	stats, err := h.usageRepo.ModelStatsByDate(q.Get("start_date"), q.Get("end_date"))
+	if err != nil {
+		writeError(w, 500, "failed to get model stats")
+		return
+	}
+	writeJSON(w, 200, stats)
+}
+
+func (h *Handlers) UsageChannelStats(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	stats, err := h.usageRepo.ChannelStatsByDate(q.Get("start_date"), q.Get("end_date"))
+	if err != nil {
+		writeError(w, 500, "failed to get channel stats")
+		return
+	}
+	writeJSON(w, 200, stats)
+}
+
 func (h *Handlers) UsageModels(w http.ResponseWriter, r *http.Request) {
 	models, err := h.usageRepo.DistinctModels()
 	if err != nil {

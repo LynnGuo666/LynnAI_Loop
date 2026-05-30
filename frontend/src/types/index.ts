@@ -113,3 +113,23 @@ export interface KeyImportResponse {
   keys: APIKey[];
   errors: Array<{ index: number; message: string }>;
 }
+
+export interface ModelStats {
+  model: string;
+  requests: number;
+  input_tokens: number;
+  output_tokens: number;
+  avg_latency_ms: number;
+}
+
+export interface ChannelStats {
+  channel_id: number;
+  channel_name: string;
+  requests: number;
+  success_count: number;
+  failure_count: number;
+  success_rate: number;
+  input_tokens: number;
+  output_tokens: number;
+  avg_latency_ms: number;
+}

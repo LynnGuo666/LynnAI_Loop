@@ -10,6 +10,7 @@ import { ChannelsPage } from "./pages/ChannelsPage";
 import { ChannelDetailPage } from "./pages/ChannelDetailPage";
 import { KeysPage } from "./pages/KeysPage";
 import { UsagePage } from "./pages/UsagePage";
+import { StatisticsPage } from "./pages/StatisticsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
 function AppInner() {
@@ -32,6 +33,7 @@ function AppInner() {
           <Route path="/channels/:id" element={<ChannelDetailPage />} />
           <Route path="/keys" element={<KeysPage />} />
           <Route path="/usage" element={<UsagePage />} />
+          <Route path="/statistics" element={<StatisticsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Routes>

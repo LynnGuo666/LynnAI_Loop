@@ -4,6 +4,8 @@ import type {
   UsageLog,
   UsageStats,
   TimeseriesPoint,
+  ModelStats,
+  ChannelStats,
   KeyProbe,
   KeyProbeBatchResponse,
   KeyExportResponse,
@@ -144,6 +146,18 @@ export const getUsageStats = (startDate?: string, endDate?: string) => {
 };
 export const getUsageTimeseries = (days = 7) =>
   requestArray<TimeseriesPoint>(`/api/usage/timeseries?days=${days}`);
+export const getUsageModelStats = (startDate?: string, endDate?: string) => {
+  const params = new URLSearchParams();
+  if (startDate) params.set("start_date", startDate);
+  if (endDate) params.set("end_date", endDate);
+  return requestArray<ModelStats>(`/api/usage/model-stats?${params}`);
+};
+export const getUsageChannelStats = (startDate?: string, endDate?: string) => {
+  const params = new URLSearchParams();
+  if (startDate) params.set("start_date", startDate);
+  if (endDate) params.set("end_date", endDate);
+  return requestArray<ChannelStats>(`/api/usage/channel-stats?${params}`);
+};
 export const getUsageModels = () => requestArray<string>("/api/usage/models");
 
 // Settings
