@@ -29,6 +29,13 @@ docker compose logs -f loop
 # Admin token: loop_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
+自动生成的管理员密钥会写入容器数据卷中的 `/data/.env`，后续重启会继续复用。
+如果想手动固定密钥，也可以在 `docker-compose.yml` 同目录创建 `.env`：
+
+```bash
+ADMIN_TOKEN=your-secret
+```
+
 访问 `http://localhost:8080`，使用该密钥登录。
 
 ### Docker
@@ -58,7 +65,8 @@ ADMIN_TOKEN=your-secret ./loop
 |---|---|---|
 | `PORT` | `8080` | HTTP 监听端口 |
 | `DB_PATH` | `loop.db` | SQLite 数据库路径 |
-| `ADMIN_TOKEN` | 自动生成 | 管理员密钥，留空则首次启动时自动生成 |
+| `ADMIN_TOKEN` | 自动生成并写入 `.env` | 管理员密钥，留空则首次启动时自动生成 |
+| `ENV_PATH` | `.env` | 自动生成管理员密钥时写入的 env 文件路径 |
 | `DISABLE_THRESHOLD` | `5` | 连续失败多少次后自动禁用密钥 |
 | `RECOVERY_PROBE_ENABLED` | `true` | 是否启用自动恢复探测 |
 | `PROBE_BACKOFF_BASE_MIN` | `60` | 恢复探测初始退避时间（分钟） |
@@ -149,4 +157,3 @@ cd frontend && npm install && npm run dev
 ```
 
 前端开发服务器会将 `/api`、`/channel`、`/v1` 请求代理到 `http://localhost:8080`。
-

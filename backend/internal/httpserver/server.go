@@ -60,10 +60,13 @@ func (s *Server) Run() error {
 	adminToken := s.cfg.AdminToken
 	if adminToken == "" {
 		adminToken = generateToken()
+		if err := config.SaveAdminToken(s.cfg.EnvPath, adminToken); err != nil {
+			log.Printf("failed to save admin token to %s: %v", s.cfg.EnvPath, err)
+		}
 		log.Printf("========================================")
 		log.Printf("  Admin Token: %s", adminToken)
 		log.Printf("========================================")
-		log.Printf("Save this token! It won't be shown again.")
+		log.Printf("Saved admin token to %s.", s.cfg.EnvPath)
 	}
 
 	rotator := services.NewKeyRotator(keyRepo, s.cfg)

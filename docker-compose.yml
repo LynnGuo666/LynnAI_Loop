@@ -8,9 +8,10 @@ services:
       - loop-data:/data
     environment:
       - DB_PATH=/data/loop.db
+      - ENV_PATH=/data/.env
       - PORT=8080
-      # Set a fixed admin token (optional, auto-generated if empty)
-      # - ADMIN_TOKEN=your-secret-token
+      # Set a fixed admin token here if needed. If omitted, Loop writes one to /data/.env.
+      - ADMIN_TOKEN=${ADMIN_TOKEN:-}
     restart: unless-stopped
 
 volumes:
