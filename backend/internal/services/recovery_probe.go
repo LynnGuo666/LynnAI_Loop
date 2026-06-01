@@ -44,7 +44,7 @@ func NewRecoveryProbe(keyRepo *repo.APIKeyRepo, probeRepo *repo.KeyProbeRepo, se
 		channelRepo:  channelRepo,
 		usageRepo:    usageRepo,
 		cfg:          cfg,
-		client:       &http.Client{Timeout: 30 * time.Second},
+		client:       &http.Client{Timeout: 30 * time.Second, Transport: newSharedTransport()},
 	}
 }
 

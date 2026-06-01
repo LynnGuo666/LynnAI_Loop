@@ -3,14 +3,16 @@ package httpserver
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
+	"loop/internal/config"
 	"loop/internal/middleware"
 	"loop/internal/services"
 )
 
-func NewRouter(h *Handlers, sh *SettingsHandlers, proxy *services.ProxyHandler, adminToken string, recoverProbe *services.RecoveryProbe) http.Handler {
+func NewRouter(h *Handlers, sh *SettingsHandlers, proxy *services.ProxyHandler, adminToken string, recoverProbe *services.RecoveryProbe, cfg config.Config) http.Handler {
 	r := chi.NewRouter()
 	r.Use(chiMiddleware.Logger)
 	r.Use(chiMiddleware.Recoverer)
@@ -20,13 +22,24 @@ func NewRouter(h *Handlers, sh *SettingsHandlers, proxy *services.ProxyHandler, 
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.AuthMiddleware(adminToken))
 
-		// Proxy endpoints
-		r.Post("/channel/{channelID}/v1/messages", proxy.HandleMessages)
-		r.Get("/channel/{channelID}/v1/models", proxy.HandleModels)
+		// Proxy endpoints — throttled to provide backpressure under load.
+		// Requests beyond the concurrency limit queue (up to backlog) and then
+		// receive 503 if the queue wait exceeds the timeout, instead of piling
+		// up goroutines that all contend for the DB write lock.
+		r.Group(func(r chi.Router) {
+			r.Use(chiMiddleware.ThrottleBacklog(
+				cfg.ProxyMaxConcurrency,
+				cfg.ProxyBacklog,
+				time.Duration(cfg.ProxyBacklogTimeoutSec)*time.Second,
+			))
 
-		// Auto-route for single channel: /v1/messages and /v1/models
-		r.Post("/v1/messages", proxy.HandleMessagesSingleChannel)
-		r.Get("/v1/models", proxy.HandleModelsSingleChannel)
+			r.Post("/channel/{channelID}/v1/messages", proxy.HandleMessages)
+			r.Get("/channel/{channelID}/v1/models", proxy.HandleModels)
+
+			// Auto-route for single channel: /v1/messages and /v1/models
+			r.Post("/v1/messages", proxy.HandleMessagesSingleChannel)
+			r.Get("/v1/models", proxy.HandleModelsSingleChannel)
+		})
 
 		r.Get("/api/healthz", sh.Healthz)
 
@@ -46,7 +59,7 @@ func NewRouter(h *Handlers, sh *SettingsHandlers, proxy *services.ProxyHandler, 
 		r.Get("/api/keys/export", h.ExportKeys)
 		r.Post("/api/keys/import", h.ImportKeys)
 		r.Post("/api/keys/probe", func(w http.ResponseWriter, r *http.Request) {
-			probeKeysHandler(w, r, recoverProbe)
+			probeKeysHandler(w, r, recoverProbe, cfg.ProbeBatchConcurrency)
 		})
 		r.Get("/api/keys/{id}", h.GetKey)
 		r.Put("/api/keys/{id}", h.UpdateKey)

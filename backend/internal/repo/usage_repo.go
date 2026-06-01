@@ -1,18 +1,18 @@
 package repo
 
 import (
-	"database/sql"
 	"fmt"
+	"loop/internal/db"
 	"loop/internal/models"
 	"strings"
 	"time"
 )
 
 type UsageRepo struct {
-	db *sql.DB
+	db *db.DB
 }
 
-func NewUsageRepo(db *sql.DB) *UsageRepo {
+func NewUsageRepo(db *db.DB) *UsageRepo {
 	return &UsageRepo{db: db}
 }
 

@@ -93,6 +93,7 @@ var migrations = []migration{
 	{Version: 3, SQL: "ALTER TABLE usage_logs ADD COLUMN output_tokens_per_sec REAL NOT NULL DEFAULT 0"},
 	{Version: 4, SQL: "ALTER TABLE usage_logs ADD COLUMN status TEXT NOT NULL DEFAULT 'success'"},
 	{Version: 5, SQL: "CREATE INDEX IF NOT EXISTS idx_usage_logs_status ON usage_logs(status)"},
+	{Version: 6, SQL: "CREATE INDEX IF NOT EXISTS idx_api_keys_channel_active ON api_keys(channel_id, is_active)"},
 }
 
 func runMigrations(db *sql.DB) error {

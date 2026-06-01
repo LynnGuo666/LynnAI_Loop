@@ -3,6 +3,7 @@ package repo
 import (
 	"database/sql"
 	"errors"
+	"loop/internal/db"
 	"loop/internal/models"
 	"strings"
 	"sync"
@@ -12,11 +13,11 @@ import (
 var ErrDuplicateAPIKey = errors.New("duplicate_api_key")
 
 type APIKeyRepo struct {
-	db *sql.DB
+	db *db.DB
 	mu sync.Mutex
 }
 
-func NewAPIKeyRepo(db *sql.DB) *APIKeyRepo {
+func NewAPIKeyRepo(db *db.DB) *APIKeyRepo {
 	return &APIKeyRepo{db: db}
 }
 
@@ -44,6 +45,83 @@ func (r *APIKeyRepo) Create(k *models.APIKey) error {
 	k.CreatedAt = now
 	k.UpdatedAt = now
 	return nil
+}
+
+// ImportItem is a key queued for batch import along with the caller's index,
+// used to report per-item outcomes back in order.
+type ImportItem struct {
+	Index int
+	Key   models.APIKey
+}
+
+// ImportError reports a failed item by its caller index.
+type ImportError struct {
+	Index   int
+	Message string
+}
+
+// ImportResult is the outcome of CreateBatch.
+type ImportResult struct {
+	Created []models.APIKey
+	Skipped int
+	Errors  []ImportError
+}
+
+// CreateBatch inserts the given keys in a single transaction. Duplicates — both
+// against existing rows and against earlier items in the same batch — are
+// skipped; per-item insert errors are recorded and the remaining items still
+// commit together. The dedup check runs inside the transaction so it sees the
+// batch's own uncommitted inserts.
+func (r *APIKeyRepo) CreateBatch(items []ImportItem) (ImportResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	result := ImportResult{
+		Created: make([]models.APIKey, 0, len(items)),
+		Errors:  make([]ImportError, 0),
+	}
+
+	tx, err := r.db.Begin()
+	if err != nil {
+		return result, err
+	}
+	defer tx.Rollback()
+
+	now := time.Now()
+	for _, item := range items {
+		k := item.Key
+		k.KeyValue = strings.TrimSpace(k.KeyValue)
+
+		var one int
+		err := tx.QueryRow(`SELECT 1 FROM api_keys WHERE key_value = ? LIMIT 1`, k.KeyValue).Scan(&one)
+		if err == nil {
+			result.Skipped++
+			continue
+		}
+		if err != sql.ErrNoRows {
+			result.Errors = append(result.Errors, ImportError{Index: item.Index, Message: err.Error()})
+			continue
+		}
+
+		res, err := tx.Exec(
+			`INSERT INTO api_keys (channel_id, key_value, alias, is_active, probe_backoff_min, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			k.ChannelID, k.KeyValue, k.Alias, boolToInt(k.IsActive), k.ProbeBackoffMin, now, now,
+		)
+		if err != nil {
+			result.Errors = append(result.Errors, ImportError{Index: item.Index, Message: err.Error()})
+			continue
+		}
+		k.ID, _ = res.LastInsertId()
+		k.CreatedAt = now
+		k.UpdatedAt = now
+		result.Created = append(result.Created, k)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return ImportResult{Created: make([]models.APIKey, 0), Errors: make([]ImportError, 0)}, err
+	}
+	return result, nil
 }
 
 func (r *APIKeyRepo) GetByID(id int64) (*models.APIKey, error) {

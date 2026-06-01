@@ -1,15 +1,15 @@
 package repo
 
 import (
-	"database/sql"
+	"loop/internal/db"
 	"loop/internal/models"
 )
 
 type KeyProbeRepo struct {
-	db *sql.DB
+	db *db.DB
 }
 
-func NewKeyProbeRepo(db *sql.DB) *KeyProbeRepo {
+func NewKeyProbeRepo(db *db.DB) *KeyProbeRepo {
 	return &KeyProbeRepo{db: db}
 }
 

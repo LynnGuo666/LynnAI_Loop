@@ -109,6 +109,10 @@ func (h *Handlers) ImportKeys(w http.ResponseWriter, r *http.Request) {
 		Keys:   make([]models.APIKey, 0),
 		Errors: make([]keyImportError, 0),
 	}
+
+	// Validate each item up front; collect the valid ones for a single
+	// transactional batch insert.
+	items := make([]repo.ImportItem, 0, len(input.Keys))
 	for idx, item := range input.Keys {
 		channelID := input.ChannelID
 		if channelID == 0 {
@@ -131,24 +135,31 @@ func (h *Handlers) ImportKeys(w http.ResponseWriter, r *http.Request) {
 		if item.IsActive != nil {
 			isActive = *item.IsActive
 		}
-		key := models.APIKey{
-			ChannelID:       channelID,
-			KeyValue:        keyValue,
-			Alias:           alias,
-			IsActive:        isActive,
-			ProbeBackoffMin: 60,
+		items = append(items, repo.ImportItem{
+			Index: idx,
+			Key: models.APIKey{
+				ChannelID:       channelID,
+				KeyValue:        keyValue,
+				Alias:           alias,
+				IsActive:        isActive,
+				ProbeBackoffMin: 60,
+			},
+		})
+	}
+
+	if len(items) > 0 {
+		batch, err := h.keyRepo.CreateBatch(items)
+		if err != nil {
+			writeError(w, 500, "failed to import keys: "+err.Error())
+			return
 		}
-		if err := h.keyRepo.Create(&key); err != nil {
-			if errors.Is(err, repo.ErrDuplicateAPIKey) {
-				result.Skipped++
-				continue
-			}
+		result.Created += len(batch.Created)
+		result.Skipped += batch.Skipped
+		result.Keys = append(result.Keys, batch.Created...)
+		for _, e := range batch.Errors {
 			result.Failed++
-			result.Errors = append(result.Errors, keyImportError{Index: idx, Message: err.Error()})
-			continue
+			result.Errors = append(result.Errors, keyImportError{Index: e.Index, Message: e.Message})
 		}
-		result.Created++
-		result.Keys = append(result.Keys, key)
 	}
 
 	writeJSON(w, 200, result)

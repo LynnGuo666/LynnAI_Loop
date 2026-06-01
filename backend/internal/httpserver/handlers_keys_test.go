@@ -16,7 +16,7 @@ import (
 func openTestHandlers(t *testing.T) *Handlers {
 	t.Helper()
 
-	database, err := db.Open(filepath.Join(t.TempDir(), "test.db"))
+	database, err := db.Open(filepath.Join(t.TempDir(), "test.db"), 4)
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}

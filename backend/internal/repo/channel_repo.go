@@ -1,16 +1,16 @@
 package repo
 
 import (
-	"database/sql"
+	"loop/internal/db"
 	"loop/internal/models"
 	"time"
 )
 
 type ChannelRepo struct {
-	db *sql.DB
+	db *db.DB
 }
 
-func NewChannelRepo(db *sql.DB) *ChannelRepo {
+func NewChannelRepo(db *db.DB) *ChannelRepo {
 	return &ChannelRepo{db: db}
 }
 

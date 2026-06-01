@@ -16,6 +16,15 @@ type Config struct {
 	ProbeCheckIntervalSec int
 	MaxProxyAttempts      int
 	UpstreamTimeoutSec    int
+
+	// Concurrency / pooling hardening
+	DBReadPoolSize           int
+	ProxyMaxConcurrency      int
+	ProxyBacklog             int
+	ProxyBacklogTimeoutSec   int
+	MaxRequestBodyMB         int
+	ProbeBatchConcurrency    int
+	ResponseHeaderTimeoutSec int
 }
 
 func Load() Config {
@@ -30,6 +39,14 @@ func Load() Config {
 		ProbeCheckIntervalSec: getEnvInt("PROBE_CHECK_INTERVAL_SEC", 300),
 		MaxProxyAttempts:      getEnvInt("MAX_PROXY_ATTEMPTS", 5),
 		UpstreamTimeoutSec:    getEnvInt("UPSTREAM_TIMEOUT_SEC", 300),
+
+		DBReadPoolSize:           getEnvInt("DB_READ_POOL_SIZE", 8),
+		ProxyMaxConcurrency:      getEnvInt("PROXY_MAX_CONCURRENCY", 200),
+		ProxyBacklog:             getEnvInt("PROXY_BACKLOG", 100),
+		ProxyBacklogTimeoutSec:   getEnvInt("PROXY_BACKLOG_TIMEOUT_SEC", 5),
+		MaxRequestBodyMB:         getEnvInt("MAX_REQUEST_BODY_MB", 32),
+		ProbeBatchConcurrency:    getEnvInt("PROBE_BATCH_CONCURRENCY", 10),
+		ResponseHeaderTimeoutSec: getEnvInt("RESPONSE_HEADER_TIMEOUT_SEC", 60),
 	}
 }
 

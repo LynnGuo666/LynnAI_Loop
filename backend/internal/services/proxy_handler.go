@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"compress/zlib"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -32,13 +33,19 @@ type ProxyHandler struct {
 }
 
 func NewProxyHandler(rotator *KeyRotator, channelRepo *repo.ChannelRepo, usageRepo *repo.UsageRepo, settingsRepo *repo.SettingsRepo, cfg config.Config) *ProxyHandler {
+	transport := newSharedTransport()
+	// Wait this long for the upstream to send response headers (first byte).
+	// The overall request has no client-level timeout so that long streaming
+	// responses are not cut off; non-stream requests get a per-request context
+	// timeout in HandleMessages instead.
+	transport.ResponseHeaderTimeout = time.Duration(cfg.ResponseHeaderTimeoutSec) * time.Second
 	return &ProxyHandler{
 		rotator:      rotator,
 		channelRepo:  channelRepo,
 		usageRepo:    usageRepo,
 		settingsRepo: settingsRepo,
 		cfg:          cfg,
-		client:       &http.Client{Timeout: time.Duration(cfg.UpstreamTimeoutSec) * time.Second},
+		client:       &http.Client{Transport: transport},
 	}
 }
 
@@ -79,8 +86,17 @@ func (ph *ProxyHandler) HandleMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Bound request body size to protect memory under load / abuse.
+	if ph.cfg.MaxRequestBodyMB > 0 {
+		r.Body = http.MaxBytesReader(w, r.Body, int64(ph.cfg.MaxRequestBodyMB)*1024*1024)
+	}
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			http.Error(w, `{"error":{"type":"invalid_request","message":"request body too large"}}`, http.StatusRequestEntityTooLarge)
+			return
+		}
 		http.Error(w, `{"error":{"type":"read_error","message":"failed to read body"}}`, http.StatusBadRequest)
 		return
 	}
@@ -92,15 +108,18 @@ func (ph *ProxyHandler) HandleMessages(w http.ResponseWriter, r *http.Request) {
 	}
 	json.Unmarshal(body, &reqBody)
 
-	maxAttempts := ph.cfg.MaxProxyAttempts
-	activeCount, _ := ph.rotator.ActiveKeyCount(channelID)
-	if activeCount < maxAttempts {
-		maxAttempts = activeCount
-	}
-	if maxAttempts == 0 {
+	// Snapshot the active keys once and rotate over the slice across attempts,
+	// instead of re-querying the DB on every attempt.
+	keys, err := ph.rotator.ActiveKeys(channelID)
+	if err != nil || len(keys) == 0 {
 		http.Error(w, `{"error":{"type":"proxy_error","message":"no_active_keys"}}`, http.StatusBadGateway)
 		return
 	}
+	maxAttempts := ph.cfg.MaxProxyAttempts
+	if len(keys) < maxAttempts {
+		maxAttempts = len(keys)
+	}
+	start := ph.rotator.NextIndex(channelID)
 
 	startTime := time.Now()
 	clientIP := r.RemoteAddr
@@ -112,11 +131,7 @@ func (ph *ProxyHandler) HandleMessages(w http.ResponseWriter, r *http.Request) {
 	var lastKey *models.APIKey
 	var lastErr error
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		key, err := ph.rotator.Select(channelID)
-		if err != nil {
-			lastErr = err
-			break
-		}
+		key := &keys[int(start+int64(attempt))%len(keys)]
 		lastKey = key
 
 		if ph.usageRepo != nil && usageLogID == 0 {
@@ -136,42 +151,11 @@ func (ph *ProxyHandler) HandleMessages(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		upstreamURL := strings.TrimRight(ch.BaseURL, "/") + "/v1/messages"
-		req, err := http.NewRequestWithContext(r.Context(), "POST", upstreamURL, bytes.NewReader(body))
-		if err != nil {
+		if err := ph.sendUpstream(w, r, ch, key, body, reqBody.Stream, reqBody.Model, clientIP, startTime, usageLogID); err != nil {
 			lastErr = err
 			continue
 		}
-
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept-Encoding", "identity")
-		req.Header.Set("x-api-key", key.KeyValue)
-		if v := r.Header.Get("anthropic-version"); v != "" {
-			req.Header.Set("anthropic-version", v)
-		} else {
-			req.Header.Set("anthropic-version", "2023-06-01")
-		}
-		if beta := r.Header.Get("anthropic-beta"); beta != "" {
-			req.Header.Set("anthropic-beta", beta)
-		}
-
-		resp, err := ph.client.Do(req)
-		if err != nil {
-			ph.rotator.ReportFailure(key.ID)
-			lastErr = err
-			continue
-		}
-
-		if reqBody.Stream {
-			err = ph.handleStreamResponse(w, resp, key, ch, reqBody.Model, "/v1/messages", clientIP, startTime, usageLogID)
-		} else {
-			err = ph.handleNonStreamResponse(w, resp, key, ch, reqBody.Model, "/v1/messages", clientIP, startTime, usageLogID)
-		}
-
-		if err == nil {
-			return
-		}
-		lastErr = err
+		return
 	}
 
 	msg := "all_keys_exhausted"
@@ -197,6 +181,50 @@ func (ph *ProxyHandler) HandleMessages(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	http.Error(w, fmt.Sprintf(`{"error":{"type":"proxy_error","message":"%s"}}`, msg), http.StatusBadGateway)
+}
+
+// sendUpstream performs a single upstream attempt for one key. A nil return means
+// the response was fully handled and written to w; a non-nil error means the
+// caller should try the next key. Non-stream requests get a per-request context
+// timeout (UpstreamTimeoutSec); stream requests use the client's request context
+// directly so long-lived SSE streams are not cut off (header wait is bounded by
+// the transport's ResponseHeaderTimeout).
+func (ph *ProxyHandler) sendUpstream(w http.ResponseWriter, r *http.Request, ch *models.Channel, key *models.APIKey, body []byte, stream bool, model, clientIP string, startTime time.Time, usageLogID int64) error {
+	reqCtx := r.Context()
+	if !stream {
+		var cancel context.CancelFunc
+		reqCtx, cancel = context.WithTimeout(r.Context(), time.Duration(ph.cfg.UpstreamTimeoutSec)*time.Second)
+		defer cancel()
+	}
+
+	upstreamURL := strings.TrimRight(ch.BaseURL, "/") + "/v1/messages"
+	req, err := http.NewRequestWithContext(reqCtx, "POST", upstreamURL, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept-Encoding", "identity")
+	req.Header.Set("x-api-key", key.KeyValue)
+	if v := r.Header.Get("anthropic-version"); v != "" {
+		req.Header.Set("anthropic-version", v)
+	} else {
+		req.Header.Set("anthropic-version", "2023-06-01")
+	}
+	if beta := r.Header.Get("anthropic-beta"); beta != "" {
+		req.Header.Set("anthropic-beta", beta)
+	}
+
+	resp, err := ph.client.Do(req)
+	if err != nil {
+		ph.rotator.ReportFailure(key.ID)
+		return err
+	}
+
+	if stream {
+		return ph.handleStreamResponse(w, resp, key, ch, model, "/v1/messages", clientIP, startTime, usageLogID)
+	}
+	return ph.handleNonStreamResponse(w, resp, key, ch, model, "/v1/messages", clientIP, startTime, usageLogID)
 }
 
 func (ph *ProxyHandler) HandleModels(w http.ResponseWriter, r *http.Request) {
@@ -278,6 +306,9 @@ func (ph *ProxyHandler) handleStreamResponse(w http.ResponseWriter, resp *http.R
 	}
 
 	scanner := bufio.NewScanner(bodyReader)
+	// Raise the per-line limit (default 64KB) so a large `data:` event line does
+	// not trigger bufio.ErrTooLong and abort the stream mid-response.
+	scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.HasPrefix(line, "data: ") {

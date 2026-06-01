@@ -2,14 +2,15 @@ package repo
 
 import (
 	"database/sql"
+	"loop/internal/db"
 	"time"
 )
 
 type SettingsRepo struct {
-	db *sql.DB
+	db *db.DB
 }
 
-func NewSettingsRepo(db *sql.DB) *SettingsRepo {
+func NewSettingsRepo(db *db.DB) *SettingsRepo {
 	return &SettingsRepo{db: db}
 }
 

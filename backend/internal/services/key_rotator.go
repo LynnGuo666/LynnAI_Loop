@@ -33,6 +33,14 @@ func (kr *KeyRotator) Select(channelID int64) (*models.APIKey, error) {
 		return nil, ErrNoActiveKeys
 	}
 
+	idx := kr.NextIndex(channelID)
+	return &keys[int(idx)%len(keys)], nil
+}
+
+// NextIndex returns the next round-robin start index for a channel, advancing
+// the channel's atomic counter. Callers that hold a key slice select
+// keys[(NextIndex()+attempt) % len(keys)] to spread load while retrying.
+func (kr *KeyRotator) NextIndex(channelID int64) int64 {
 	kr.mu.Lock()
 	counter, ok := kr.counters[channelID]
 	if !ok {
@@ -41,8 +49,13 @@ func (kr *KeyRotator) Select(channelID int64) (*models.APIKey, error) {
 	}
 	kr.mu.Unlock()
 
-	idx := counter.Add(1) - 1
-	return &keys[int(idx)%len(keys)], nil
+	return counter.Add(1) - 1
+}
+
+// ActiveKeys returns the active keys for a channel in a single query, letting
+// the caller perform rotation/retry without re-querying per attempt.
+func (kr *KeyRotator) ActiveKeys(channelID int64) ([]models.APIKey, error) {
+	return kr.keyRepo.ListActiveByChannel(channelID)
 }
 
 func (kr *KeyRotator) ReportSuccess(keyID int64) {
@@ -55,12 +68,4 @@ func (kr *KeyRotator) ReportFailure(keyID int64) {
 
 func (kr *KeyRotator) DeleteKey(keyID int64) {
 	kr.keyRepo.Delete(keyID)
-}
-
-func (kr *KeyRotator) ActiveKeyCount(channelID int64) (int, error) {
-	keys, err := kr.keyRepo.ListActiveByChannel(channelID)
-	if err != nil {
-		return 0, err
-	}
-	return len(keys), nil
 }

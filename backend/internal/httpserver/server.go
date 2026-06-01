@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -32,7 +33,7 @@ func NewServer(cfg config.Config) *Server {
 }
 
 func (s *Server) Run() error {
-	database, err := db.Open(s.cfg.DBPath)
+	database, err := db.Open(s.cfg.DBPath, s.cfg.DBReadPoolSize)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}
@@ -77,11 +78,17 @@ func (s *Server) Run() error {
 	handlers := NewHandlers(channelRepo, keyRepo, usageRepo, probeRepo, settingsRepo)
 	settingsHandlers := NewSettingsHandlers(settingsRepo, s.cfg)
 
-	router := NewRouter(handlers, settingsHandlers, proxy, adminToken, recoveryProbe)
+	router := NewRouter(handlers, settingsHandlers, proxy, adminToken, recoveryProbe, s.cfg)
 
 	srv := &http.Server{
 		Addr:    ":" + s.cfg.Port,
 		Handler: router,
+		// Protect against slow/idle clients holding goroutines open. No
+		// WriteTimeout is set on purpose: it would cap the total response
+		// duration and cut off long-lived streaming (SSE) responses.
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       60 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	go func() {
@@ -147,7 +154,7 @@ type probeKeysResponse struct {
 	Results []probeKeysResult `json:"results"`
 }
 
-func probeKeysHandler(w http.ResponseWriter, r *http.Request, rp *services.RecoveryProbe) {
+func probeKeysHandler(w http.ResponseWriter, r *http.Request, rp *services.RecoveryProbe, concurrency int) {
 	var input probeKeysRequest
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		writeError(w, 400, "invalid request body")
@@ -158,23 +165,41 @@ func probeKeysHandler(w http.ResponseWriter, r *http.Request, rp *services.Recov
 		return
 	}
 
+	// Deduplicate while preserving order.
 	seen := make(map[int64]bool, len(input.IDs))
-	results := make([]probeKeysResult, 0, len(input.IDs))
+	ids := make([]int64, 0, len(input.IDs))
 	for _, id := range input.IDs {
 		if id <= 0 || seen[id] {
 			continue
 		}
 		seen[id] = true
-
-		probe, deleted, err := rp.ProbeSingleKeyWithOptions(r.Context(), id, services.ProbeSingleKeyOptions{
-			DeleteOn401: input.DeleteOn401,
-		})
-		result := probeKeysResult{ID: id, Probe: probe, Deleted: deleted}
-		if err != nil {
-			result.Error = err.Error()
-		}
-		results = append(results, result)
+		ids = append(ids, id)
 	}
+
+	if concurrency < 1 {
+		concurrency = 1
+	}
+	results := make([]probeKeysResult, len(ids))
+	sem := make(chan struct{}, concurrency)
+	var wg sync.WaitGroup
+	for i, id := range ids {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(i int, id int64) {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			probe, deleted, err := rp.ProbeSingleKeyWithOptions(r.Context(), id, services.ProbeSingleKeyOptions{
+				DeleteOn401: input.DeleteOn401,
+			})
+			result := probeKeysResult{ID: id, Probe: probe, Deleted: deleted}
+			if err != nil {
+				result.Error = err.Error()
+			}
+			results[i] = result
+		}(i, id)
+	}
+	wg.Wait()
 
 	resp := probeKeysResponse{Total: len(results), Results: results}
 	for _, result := range results {
