@@ -16,6 +16,14 @@ func NewUsageRepo(db *db.DB) *UsageRepo {
 	return &UsageRepo{db: db}
 }
 
+// fmtTime formats a time.Time as a SQLite-compatible datetime string in UTC.
+// Go's modernc sqlite driver stores time.Time using time.String() which includes
+// timezone names and monotonic clock readings that SQLite's date/time functions
+// cannot parse. Formatting as "2006-01-02 15:04:05" avoids this issue.
+func fmtTime(t time.Time) string {
+	return t.UTC().Format("2006-01-02 15:04:05")
+}
+
 func (r *UsageRepo) Create(log *models.UsageLog) error {
 	result, err := r.db.Exec(
 		`INSERT INTO usage_logs (channel_id, api_key_id, model, endpoint, input_tokens, output_tokens,
@@ -25,7 +33,7 @@ func (r *UsageRepo) Create(log *models.UsageLog) error {
 		log.ChannelID, log.APIKeyID, log.Model, log.Endpoint, log.InputTokens, log.OutputTokens,
 		log.CacheCreationTokens, log.CacheReadTokens, boolToInt(log.IsStream), log.StatusCode,
 		log.LatencyMs, log.FirstTokenMs, log.OutputTokensPerSec, boolToInt(log.Success),
-		log.ErrorMessage, log.ClientIP, log.Status, log.CreatedAt,
+		log.ErrorMessage, log.ClientIP, log.Status, fmtTime(log.CreatedAt),
 	)
 	if err != nil {
 		return err
@@ -39,7 +47,7 @@ func (r *UsageRepo) CreatePending(log *models.UsageLog) error {
 	result, err := r.db.Exec(
 		`INSERT INTO usage_logs (channel_id, api_key_id, model, endpoint, client_ip, status, created_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		log.ChannelID, log.APIKeyID, log.Model, log.Endpoint, log.ClientIP, log.Status, log.CreatedAt,
+		log.ChannelID, log.APIKeyID, log.Model, log.Endpoint, log.ClientIP, log.Status, fmtTime(log.CreatedAt),
 	)
 	if err != nil {
 		return err

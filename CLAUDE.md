@@ -2,20 +2,29 @@
 
 ## Development Rules
 
-### 时间必须使用 UTC
+### 时间必须使用 UTC 且格式化为字符串写入 SQLite
 
-所有涉及时间的操作 **必须使用 UTC**，禁止使用本地时间 (`time.Now()`)。
+Go 的 `time.Time` 对象被 `modernc.org/sqlite` 驱动存储为 `time.String()` 格式
+（如 `2026-05-27 13:49:23.341308 +0800 CST m=+105.895498543`），
+SQLite 的 `date()` / `datetime()` 函数无法解析该格式，会导致时间查询全部失效。
 
-- Go 代码中写入数据库的时间字段统一使用 `time.Now().UTC()`
-- SQLite 查询中 `datetime('now')` 本身就是 UTC，因此两者必须匹配
-- 禁止混用本地时间和 UTC，否则会导致时间范围查询（timeseries、today stats 等）数据丢失
+**两条规则：**
+
+1. 所有时间统一使用 UTC：`time.Now().UTC()`
+2. 写入 SQLite 时必须格式化为字符串：`t.UTC().Format("2006-01-02 15:04:05")`
+
+repo 包中已有 `fmtTime()` 辅助函数，直接使用即可。
 
 **错误示例：**
 ```go
-CreatedAt: time.Now()        // ❌ 本地时间，与 SQLite UTC 不一致
+// ❌ 本地时间 + 传 time.Time 对象给 SQL
+CreatedAt: time.Now()
+db.Exec("INSERT INTO t (created_at) VALUES (?)", time.Now())
 ```
 
 **正确示例：**
 ```go
-CreatedAt: time.Now().UTC()  // ✅ UTC，与 SQLite datetime('now') 一致
+// ✅ UTC + 格式化字符串
+CreatedAt: time.Now().UTC()
+db.Exec("INSERT INTO t (created_at) VALUES (?)", fmtTime(time.Now()))
 ```

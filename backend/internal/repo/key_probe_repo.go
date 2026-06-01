@@ -17,7 +17,7 @@ func (r *KeyProbeRepo) Create(p *models.KeyProbe) error {
 	result, err := r.db.Exec(
 		`INSERT INTO key_probes (api_key_id, success, latency_ms, status_code, error_msg, created_at)
 		 VALUES (?, ?, ?, ?, ?, ?)`,
-		p.APIKeyID, boolToInt(p.Success), p.LatencyMs, p.StatusCode, p.ErrorMsg, p.CreatedAt,
+		p.APIKeyID, boolToInt(p.Success), p.LatencyMs, p.StatusCode, p.ErrorMsg, fmtTime(p.CreatedAt),
 	)
 	if err != nil {
 		return err

@@ -36,7 +36,7 @@ func (r *APIKeyRepo) Create(k *models.APIKey) error {
 	result, err := r.db.Exec(
 		`INSERT INTO api_keys (channel_id, key_value, alias, is_active, probe_backoff_min, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		k.ChannelID, k.KeyValue, k.Alias, boolToInt(k.IsActive), k.ProbeBackoffMin, now, now,
+		k.ChannelID, k.KeyValue, k.Alias, boolToInt(k.IsActive), k.ProbeBackoffMin, fmtTime(now), fmtTime(now),
 	)
 	if err != nil {
 		return err
@@ -106,7 +106,7 @@ func (r *APIKeyRepo) CreateBatch(items []ImportItem) (ImportResult, error) {
 		res, err := tx.Exec(
 			`INSERT INTO api_keys (channel_id, key_value, alias, is_active, probe_backoff_min, created_at, updated_at)
 			 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			k.ChannelID, k.KeyValue, k.Alias, boolToInt(k.IsActive), k.ProbeBackoffMin, now, now,
+			k.ChannelID, k.KeyValue, k.Alias, boolToInt(k.IsActive), k.ProbeBackoffMin, fmtTime(now), fmtTime(now),
 		)
 		if err != nil {
 			result.Errors = append(result.Errors, ImportError{Index: item.Index, Message: err.Error()})
@@ -201,7 +201,7 @@ func (r *APIKeyRepo) Update(k *models.APIKey) error {
 		        last_used_at=?, last_failure_at=?, disabled_at=?, next_probe_at=?, probe_backoff_min=?, updated_at=?
 		 WHERE id=?`,
 		k.Alias, boolToInt(k.IsActive), k.ConsecutiveFailures, k.TotalFailures, k.TotalSuccesses,
-		k.LastUsedAt, k.LastFailureAt, k.DisabledAt, k.NextProbeAt, k.ProbeBackoffMin, time.Now(), k.ID,
+		k.LastUsedAt, k.LastFailureAt, k.DisabledAt, k.NextProbeAt, k.ProbeBackoffMin, fmtTime(time.Now()), k.ID,
 	)
 	return err
 }
@@ -237,13 +237,14 @@ func (r *APIKeyRepo) RecordSuccess(id int64) error {
 		     last_used_at = ?,
 		     updated_at = ?
 		 WHERE id = ?`,
-		now, now, id,
+		fmtTime(now), fmtTime(now), id,
 	)
 	return err
 }
 
 func (r *APIKeyRepo) RecordFailure(id int64, disableThreshold int) error {
 	now := time.Now()
+	nowStr := fmtTime(now)
 	_, err := r.db.Exec(
 		`UPDATE api_keys
 		 SET consecutive_failures = consecutive_failures + 1,
@@ -264,7 +265,7 @@ func (r *APIKeyRepo) RecordFailure(id int64, disableThreshold int) error {
 		     END,
 		     updated_at = ?
 		 WHERE id = ?`,
-		now, now, disableThreshold, disableThreshold, now, disableThreshold, now, id,
+		nowStr, nowStr, disableThreshold, disableThreshold, nowStr, disableThreshold, nowStr, id,
 	)
 	return err
 }
