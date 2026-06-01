@@ -157,3 +157,6 @@ cd frontend && npm install && npm run dev
 ```
 
 前端开发服务器会将 `/api`、`/channel`、`/v1` 请求代理到 `http://localhost:8080`。
+
+## 感谢
+- [LinuxDo](https://linux.do/)
