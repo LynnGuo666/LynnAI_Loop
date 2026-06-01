@@ -142,7 +142,7 @@ func (ph *ProxyHandler) HandleMessages(w http.ResponseWriter, r *http.Request) {
 				Endpoint:  "/v1/messages",
 				ClientIP:  clientIP,
 				Status:    "pending",
-				CreatedAt: time.Now(),
+				CreatedAt: time.Now().UTC(),
 			}
 			if err := ph.usageRepo.CreatePending(pendingLog); err != nil {
 				log.Printf("usage log create pending error: channel=%d key=%d endpoint=/v1/messages err=%v", ch.ID, key.ID, err)

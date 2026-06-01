@@ -152,7 +152,7 @@ func (rp *RecoveryProbe) recordProbeUsage(key *models.APIKey, probe *models.KeyP
 		Success:      probe.Success,
 		ErrorMessage: probe.ErrorMsg,
 		Status:       status,
-		CreatedAt:    time.Now(),
+		CreatedAt:    time.Now().UTC(),
 	}); err != nil {
 		return fmt.Errorf("记录探测用量失败: %w", err)
 	}
@@ -239,7 +239,7 @@ func (rp *RecoveryProbe) ProbeSingleKeyWithOptions(ctx context.Context, keyID in
 func (rp *RecoveryProbe) runProbe(ctx context.Context, key *models.APIKey) (models.KeyProbe, []byte, bool, error) {
 	probe := models.KeyProbe{
 		APIKeyID:  key.ID,
-		CreatedAt: time.Now(),
+		CreatedAt: time.Now().UTC(),
 	}
 
 	ch, err := rp.channelRepo.GetByID(key.ChannelID)
