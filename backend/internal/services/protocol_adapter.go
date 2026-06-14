@@ -351,13 +351,11 @@ func (geminiAdapter) BuildProbeRequest(modelID string) probeRequest {
 	body, _ := json.Marshal(map[string]interface{}{
 		"contents": []map[string]interface{}{
 			{
-				"role": "user",
 				"parts": []map[string]string{
 					{"text": "hi"},
 				},
 			},
 		},
-		"generationConfig": map[string]int{"maxOutputTokens": 1},
 	})
 	escapedModel := url.PathEscape(modelID)
 	return probeRequest{Path: "/v1beta/models/" + escapedModel + ":generateContent", Body: body}

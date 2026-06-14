@@ -32,6 +32,19 @@ func TestAuthMiddlewareAcceptsXAPIKey(t *testing.T) {
 	}
 }
 
+func TestAuthMiddlewareAcceptsXGoogAPIKey(t *testing.T) {
+	handler := AuthMiddleware("secret")(okHandler())
+	req := httptest.NewRequest(http.MethodGet, "/v1beta/models/gemini-2.5-flash:generateContent", nil)
+	req.Header.Set("x-goog-api-key", "secret")
+	res := httptest.NewRecorder()
+
+	handler.ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
+	}
+}
+
 func TestAuthMiddlewareRejectsMissingToken(t *testing.T) {
 	handler := AuthMiddleware("secret")(okHandler())
 	req := httptest.NewRequest(http.MethodGet, "/v1/messages", nil)

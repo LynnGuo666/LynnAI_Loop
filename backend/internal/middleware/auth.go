@@ -30,7 +30,10 @@ func tokenFromRequest(r *http.Request) string {
 	if strings.HasPrefix(auth, "Bearer ") {
 		return strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
 	}
-	return strings.TrimSpace(r.Header.Get("x-api-key"))
+	if key := strings.TrimSpace(r.Header.Get("x-api-key")); key != "" {
+		return key
+	}
+	return strings.TrimSpace(r.Header.Get("x-goog-api-key"))
 }
 
 func sha256Hash(s string) string {

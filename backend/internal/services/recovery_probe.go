@@ -319,10 +319,11 @@ func (rp *RecoveryProbe) probeMessages(ctx context.Context, ch *models.Channel, 
 	respBody, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		detail := compactErrorBody(respBody)
 		if isAuthFailure(resp.StatusCode) {
-			return respBody, resp.StatusCode, latency, fmt.Errorf("认证失败: %d", resp.StatusCode)
+			return respBody, resp.StatusCode, latency, fmt.Errorf("认证失败: %d%s", resp.StatusCode, detail)
 		}
-		return respBody, resp.StatusCode, latency, fmt.Errorf("%s 探测失败: %d", probeReq.Path, resp.StatusCode)
+		return respBody, resp.StatusCode, latency, fmt.Errorf("%s 探测失败: %d%s", probeReq.Path, resp.StatusCode, detail)
 	}
 
 	return respBody, resp.StatusCode, latency, nil
@@ -345,6 +346,18 @@ func chooseProbeModel(modelIDs []string) string {
 
 func joinUpstreamURL(baseURL, path string) string {
 	return strings.TrimRight(baseURL, "/") + path
+}
+
+func compactErrorBody(body []byte) string {
+	text := strings.TrimSpace(string(body))
+	if text == "" {
+		return ""
+	}
+	text = strings.Join(strings.Fields(text), " ")
+	if len(text) > 500 {
+		text = text[:500] + "..."
+	}
+	return ": " + text
 }
 
 func isAuthFailure(statusCode int) bool {
