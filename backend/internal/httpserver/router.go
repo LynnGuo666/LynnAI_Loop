@@ -34,10 +34,18 @@ func NewRouter(h *Handlers, sh *SettingsHandlers, proxy *services.ProxyHandler, 
 			))
 
 			r.Post("/channel/{channelID}/v1/messages", proxy.HandleMessages)
+			r.Post("/channel/{channelID}/v1/chat/completions", proxy.HandleProxy)
+			r.Post("/channel/{channelID}/v1/responses", proxy.HandleProxy)
+			r.Post("/channel/{channelID}/v1beta/models/{model}:generateContent", proxy.HandleProxy)
+			r.Post("/channel/{channelID}/v1beta/models/{model}:streamGenerateContent", proxy.HandleProxy)
 			r.Get("/channel/{channelID}/v1/models", proxy.HandleModels)
 
-			// Auto-route for single channel: /v1/messages and /v1/models
+			// Auto-route for single channel proxy endpoints.
 			r.Post("/v1/messages", proxy.HandleMessagesSingleChannel)
+			r.Post("/v1/chat/completions", proxy.HandleProxySingleChannel)
+			r.Post("/v1/responses", proxy.HandleProxySingleChannel)
+			r.Post("/v1beta/models/{model}:generateContent", proxy.HandleProxySingleChannel)
+			r.Post("/v1beta/models/{model}:streamGenerateContent", proxy.HandleProxySingleChannel)
 			r.Get("/v1/models", proxy.HandleModelsSingleChannel)
 		})
 
@@ -102,7 +110,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, x-api-key, anthropic-version, anthropic-beta")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, x-api-key, x-goog-api-key, anthropic-version, anthropic-beta, OpenAI-Beta")
 		w.Header().Set("Access-Control-Expose-Headers", "*")
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)

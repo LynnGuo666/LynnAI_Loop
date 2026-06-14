@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS channels (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
     base_url TEXT NOT NULL,
+    protocol TEXT NOT NULL DEFAULT 'anthropic_messages',
     description TEXT NOT NULL DEFAULT '',
     probe_model TEXT NOT NULL DEFAULT '',
     is_active INTEGER NOT NULL DEFAULT 1,
@@ -97,6 +98,7 @@ var migrations = []migration{
 	{Version: 5, SQL: "CREATE INDEX IF NOT EXISTS idx_usage_logs_status ON usage_logs(status)"},
 	{Version: 6, SQL: "CREATE INDEX IF NOT EXISTS idx_api_keys_channel_active ON api_keys(channel_id, is_active)"},
 	{Version: 7, Fn: fixTimeFormats},
+	{Version: 8, SQL: "ALTER TABLE channels ADD COLUMN protocol TEXT NOT NULL DEFAULT 'anthropic_messages'"},
 }
 
 func runMigrations(db *sql.DB) error {

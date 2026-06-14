@@ -81,11 +81,17 @@ export const updateChannel = (id: number, data: Partial<Channel>) =>
 export const deleteChannel = (id: number) =>
   request<{ status: string }>(`/api/channels/${id}`, { method: "DELETE" });
 export const listChannelModels = (id: number) =>
-  request<{ data?: Array<{ id?: string }> }>(`/channel/${id}/v1/models`).then((r) =>
-    Array.isArray(r.data)
-      ? r.data.map((m) => m.id?.trim()).filter((id): id is string => Boolean(id))
-      : []
-  );
+  request<{ data?: Array<{ id?: string }>; models?: Array<{ name?: string }> }>(`/channel/${id}/v1/models`).then((r) => {
+    if (Array.isArray(r.data)) {
+      return r.data.map((m) => m.id?.trim()).filter((model): model is string => Boolean(model));
+    }
+    if (Array.isArray(r.models)) {
+      return r.models
+        .map((m) => m.name?.replace(/^models\//, "").trim())
+        .filter((model): model is string => Boolean(model));
+    }
+    return [];
+  });
 
 // Keys
 export const listKeysByChannel = (channelId: number) =>

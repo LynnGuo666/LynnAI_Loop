@@ -1,9 +1,7 @@
 package services
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -24,12 +22,6 @@ type RecoveryProbe struct {
 	usageRepo    *repo.UsageRepo
 	cfg          config.Config
 	client       *http.Client
-}
-
-type upstreamModelsResponse struct {
-	Data []struct {
-		ID string `json:"id"`
-	} `json:"data"`
 }
 
 type ProbeSingleKeyOptions struct {
@@ -131,7 +123,11 @@ func (rp *RecoveryProbe) recordProbeUsage(key *models.APIKey, probe *models.KeyP
 	}
 	var inputTokens, outputTokens int64
 	if probe.Success && len(respBody) > 0 {
-		usage := extractUsageFromBody(respBody)
+		ch, err := rp.channelRepo.GetByID(key.ChannelID)
+		if err != nil {
+			return fmt.Errorf("获取渠道协议失败: %w", err)
+		}
+		usage := adapterForChannel(ch).ParseNonStreamUsage(respBody)
 		inputTokens = usage.InputTokens
 		outputTokens = usage.OutputTokens
 	}
@@ -246,11 +242,12 @@ func (rp *RecoveryProbe) runProbe(ctx context.Context, key *models.APIKey) (mode
 	if err != nil {
 		return probe, nil, false, err
 	}
+	adapter := adapterForChannel(ch)
 
 	modelID := strings.TrimSpace(ch.ProbeModel)
 	if modelID == "" {
 		var models []string
-		models, probe.StatusCode, probe.LatencyMs, err = rp.fetchProbeModels(ctx, ch, key)
+		models, probe.StatusCode, probe.LatencyMs, err = rp.fetchProbeModels(ctx, ch, key, adapter)
 		if err != nil {
 			probe.ErrorMsg = err.Error()
 			return probe, nil, false, nil
@@ -262,7 +259,7 @@ func (rp *RecoveryProbe) runProbe(ctx context.Context, key *models.APIKey) (mode
 		}
 	}
 
-	respBody, statusCode, latency, err := rp.probeMessages(ctx, ch, key, modelID)
+	respBody, statusCode, latency, err := rp.probeMessages(ctx, ch, key, adapter, modelID)
 	probe.StatusCode = statusCode
 	probe.LatencyMs = latency
 	if err != nil {
@@ -274,13 +271,12 @@ func (rp *RecoveryProbe) runProbe(ctx context.Context, key *models.APIKey) (mode
 	return probe, respBody, false, nil
 }
 
-func (rp *RecoveryProbe) fetchProbeModels(ctx context.Context, ch *models.Channel, key *models.APIKey) ([]string, int, int64, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", joinUpstreamURL(ch.BaseURL, "/v1/models"), nil)
+func (rp *RecoveryProbe) fetchProbeModels(ctx context.Context, ch *models.Channel, key *models.APIKey, adapter protocolAdapter) ([]string, int, int64, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", joinUpstreamURL(ch.BaseURL, adapter.ProbeModelsPath()), nil)
 	if err != nil {
 		return nil, 0, 0, err
 	}
-	req.Header.Set("x-api-key", key.KeyValue)
-	req.Header.Set("anthropic-version", "2023-06-01")
+	adapter.ApplyHeaders(req, nil, key.KeyValue)
 
 	start := time.Now()
 	resp, err := rp.client.Do(req)
@@ -295,37 +291,23 @@ func (rp *RecoveryProbe) fetchProbeModels(ctx context.Context, ch *models.Channe
 		if isAuthFailure(resp.StatusCode) {
 			return nil, resp.StatusCode, latency, fmt.Errorf("模型列表认证失败: %d", resp.StatusCode)
 		}
-		return nil, resp.StatusCode, latency, fmt.Errorf("/v1/models 请求失败: %d", resp.StatusCode)
+		return nil, resp.StatusCode, latency, fmt.Errorf("%s 请求失败: %d", adapter.ProbeModelsPath(), resp.StatusCode)
 	}
 
-	var parsed upstreamModelsResponse
-	if err := json.Unmarshal(body, &parsed); err != nil {
-		return nil, resp.StatusCode, latency, fmt.Errorf("解析 /v1/models 响应失败: %w", err)
-	}
-
-	modelIDs := make([]string, 0, len(parsed.Data))
-	for _, item := range parsed.Data {
-		if id := strings.TrimSpace(item.ID); id != "" {
-			modelIDs = append(modelIDs, id)
-		}
+	modelIDs, err := adapter.ParseModels(body)
+	if err != nil {
+		return nil, resp.StatusCode, latency, fmt.Errorf("解析模型列表响应失败: %w", err)
 	}
 	return modelIDs, resp.StatusCode, latency, nil
 }
 
-func (rp *RecoveryProbe) probeMessages(ctx context.Context, ch *models.Channel, key *models.APIKey, modelID string) ([]byte, int, int64, error) {
-	body, _ := json.Marshal(map[string]interface{}{
-		"model":      modelID,
-		"max_tokens": 1,
-		"messages":   []map[string]string{{"role": "user", "content": "hi"}},
-	})
-
-	req, err := http.NewRequestWithContext(ctx, "POST", joinUpstreamURL(ch.BaseURL, "/v1/messages"), bytes.NewReader(body))
+func (rp *RecoveryProbe) probeMessages(ctx context.Context, ch *models.Channel, key *models.APIKey, adapter protocolAdapter, modelID string) ([]byte, int, int64, error) {
+	probeReq := adapter.BuildProbeRequest(modelID)
+	req, err := http.NewRequestWithContext(ctx, "POST", joinUpstreamURL(ch.BaseURL, probeReq.Path), strings.NewReader(string(probeReq.Body)))
 	if err != nil {
 		return nil, 0, 0, err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", key.KeyValue)
-	req.Header.Set("anthropic-version", "2023-06-01")
+	adapter.ApplyHeaders(req, nil, key.KeyValue)
 
 	start := time.Now()
 	resp, err := rp.client.Do(req)
@@ -340,7 +322,7 @@ func (rp *RecoveryProbe) probeMessages(ctx context.Context, ch *models.Channel, 
 		if isAuthFailure(resp.StatusCode) {
 			return respBody, resp.StatusCode, latency, fmt.Errorf("认证失败: %d", resp.StatusCode)
 		}
-		return respBody, resp.StatusCode, latency, fmt.Errorf("/v1/messages 探测失败: %d", resp.StatusCode)
+		return respBody, resp.StatusCode, latency, fmt.Errorf("%s 探测失败: %d", probeReq.Path, resp.StatusCode)
 	}
 
 	return respBody, resp.StatusCode, latency, nil

@@ -3,6 +3,7 @@ export interface Channel {
   id: number;
   name: string;
   base_url: string;
+  protocol: string;
   description: string;
   probe_model: string;
   is_active: boolean;

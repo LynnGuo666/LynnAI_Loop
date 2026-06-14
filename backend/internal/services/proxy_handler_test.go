@@ -2,6 +2,8 @@ package services
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -16,7 +18,7 @@ func TestExtractUsageFromBody(t *testing.T) {
 		}
 	}`)
 
-	usage := extractUsageFromBody(body)
+	usage := extractUsageFromBody(body, anthropicUsageParser)
 
 	if usage.InputTokens != 12 {
 		t.Fatalf("InputTokens = %d, want 12", usage.InputTokens)
@@ -43,7 +45,7 @@ func TestParseUsageWithNestedCacheCreation(t *testing.T) {
 		"cache_read_input_tokens": 50
 	}`)
 
-	usage := parseUsage(raw)
+	usage := anthropicUsageParser(raw)
 
 	if usage.CacheCreationTokens != 70 {
 		t.Fatalf("CacheCreationTokens = %d, want 70", usage.CacheCreationTokens)
@@ -54,7 +56,7 @@ func TestParseUsageWithNestedCacheCreation(t *testing.T) {
 }
 
 func TestExtractTokensFromStreamingEvents(t *testing.T) {
-	var input, output, cacheCreate, cacheRead int64
+	var metrics streamMetrics
 	startEvent := map[string]json.RawMessage{
 		"message": json.RawMessage(`{
 			"usage": {
@@ -68,20 +70,20 @@ func TestExtractTokensFromStreamingEvents(t *testing.T) {
 		"usage": json.RawMessage(`{"output_tokens": 44}`),
 	}
 
-	extractTokensFromMessageStart(startEvent, &input, &cacheCreate, &cacheRead)
-	extractTokensFromMessageDelta(deltaEvent, &input, &output, &cacheCreate, &cacheRead)
+	extractTokensFromMessageStart(startEvent, &metrics.Usage.InputTokens, &metrics.Usage.CacheCreationTokens, &metrics.Usage.CacheReadTokens)
+	extractTokensFromMessageDelta(deltaEvent, &metrics.Usage)
 
-	if input != 11 {
-		t.Fatalf("input = %d, want 11", input)
+	if metrics.Usage.InputTokens != 11 {
+		t.Fatalf("input = %d, want 11", metrics.Usage.InputTokens)
 	}
-	if output != 44 {
-		t.Fatalf("output = %d, want 44", output)
+	if metrics.Usage.OutputTokens != 44 {
+		t.Fatalf("output = %d, want 44", metrics.Usage.OutputTokens)
 	}
-	if cacheCreate != 22 {
-		t.Fatalf("cacheCreate = %d, want 22", cacheCreate)
+	if metrics.Usage.CacheCreationTokens != 22 {
+		t.Fatalf("cacheCreate = %d, want 22", metrics.Usage.CacheCreationTokens)
 	}
-	if cacheRead != 33 {
-		t.Fatalf("cacheRead = %d, want 33", cacheRead)
+	if metrics.Usage.CacheReadTokens != 33 {
+		t.Fatalf("cacheRead = %d, want 33", metrics.Usage.CacheReadTokens)
 	}
 }
 
@@ -117,10 +119,88 @@ func TestEventHasTextDelta(t *testing.T) {
 		"usage": json.RawMessage(`{"output_tokens": 12}`),
 	}
 
-	if !eventHasTextDelta(textEvent) {
+	if !anthropicEventHasTextDelta(textEvent) {
 		t.Fatalf("eventHasTextDelta(textEvent) = false, want true")
 	}
-	if eventHasTextDelta(emptyEvent) {
+	if anthropicEventHasTextDelta(emptyEvent) {
 		t.Fatalf("eventHasTextDelta(emptyEvent) = true, want false")
+	}
+}
+
+func TestOpenAIUsageParser(t *testing.T) {
+	usage := openAIUsageParser(json.RawMessage(`{
+		"prompt_tokens": 15,
+		"completion_tokens": 25
+	}`))
+
+	if usage.InputTokens != 15 {
+		t.Fatalf("InputTokens = %d, want 15", usage.InputTokens)
+	}
+	if usage.OutputTokens != 25 {
+		t.Fatalf("OutputTokens = %d, want 25", usage.OutputTokens)
+	}
+}
+
+func TestGeminiUsageFromBody(t *testing.T) {
+	usage := geminiUsageFromBody([]byte(`{
+		"usageMetadata": {
+			"promptTokenCount": 7,
+			"candidatesTokenCount": 9
+		}
+	}`))
+
+	if usage.InputTokens != 7 {
+		t.Fatalf("InputTokens = %d, want 7", usage.InputTokens)
+	}
+	if usage.OutputTokens != 9 {
+		t.Fatalf("OutputTokens = %d, want 9", usage.OutputTokens)
+	}
+}
+
+func TestOpenAIChatAdapterHeadersAndMeta(t *testing.T) {
+	adapter := openAIChatAdapter{}
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	upstreamReq := httptest.NewRequest(http.MethodPost, "https://example.com/v1/chat/completions", nil)
+
+	meta := adapter.RequestMeta(req, []byte(`{"model":"gpt-test","stream":true}`))
+	adapter.ApplyHeaders(upstreamReq, nil, "sk-test")
+
+	if meta.Model != "gpt-test" {
+		t.Fatalf("Model = %q, want gpt-test", meta.Model)
+	}
+	if !meta.Stream {
+		t.Fatalf("Stream = false, want true")
+	}
+	if upstreamReq.Header.Get("Authorization") != "Bearer sk-test" {
+		t.Fatalf("Authorization = %q", upstreamReq.Header.Get("Authorization"))
+	}
+}
+
+func TestGeminiAdapterPathHeadersAndModels(t *testing.T) {
+	adapter := geminiAdapter{}
+	req := httptest.NewRequest(http.MethodPost, "/channel/7/v1beta/models/gemini-2.5-flash:streamGenerateContent", nil)
+	upstreamReq := httptest.NewRequest(http.MethodPost, "https://example.com/v1beta/models/gemini-2.5-flash:streamGenerateContent", nil)
+
+	meta := adapter.RequestMeta(req, []byte(`{}`))
+	adapter.ApplyHeaders(upstreamReq, nil, "gemini-key")
+	models, err := adapter.ParseModels([]byte(`{"models":[{"name":"models/gemini-a"},{"name":"models/gemini-b"}]}`))
+	if err != nil {
+		t.Fatalf("ParseModels error: %v", err)
+	}
+
+	if meta.Model != "gemini-2.5-flash" {
+		t.Fatalf("Model = %q, want gemini-2.5-flash", meta.Model)
+	}
+	if !meta.Stream {
+		t.Fatalf("Stream = false, want true")
+	}
+	if upstreamReq.Header.Get("x-goog-api-key") != "gemini-key" {
+		t.Fatalf("x-goog-api-key = %q", upstreamReq.Header.Get("x-goog-api-key"))
+	}
+	if upstreamReq.URL.Query().Get("alt") != "sse" {
+		t.Fatalf("alt = %q, want sse", upstreamReq.URL.Query().Get("alt"))
+	}
+	if len(models) != 2 || models[0] != "gemini-a" || models[1] != "gemini-b" {
+		t.Fatalf("models = %#v", models)
 	}
 }

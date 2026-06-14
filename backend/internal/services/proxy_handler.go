@@ -53,14 +53,18 @@ func (ph *ProxyHandler) SetChannelRepo(cr *repo.ChannelRepo) {
 	ph.channelRepo = cr
 }
 
-func (ph *ProxyHandler) HandleMessagesSingleChannel(w http.ResponseWriter, r *http.Request) {
+func (ph *ProxyHandler) HandleProxySingleChannel(w http.ResponseWriter, r *http.Request) {
 	channels, err := ph.channelRepo.List()
 	if err != nil || len(channels) != 1 {
 		http.Error(w, `{"error":{"type":"not_found","message":"single-channel auto-route requires exactly one channel"}}`, http.StatusBadRequest)
 		return
 	}
 	r.SetPathValue("channelID", strconv.FormatInt(channels[0].ID, 10))
-	ph.HandleMessages(w, r)
+	ph.HandleProxy(w, r)
+}
+
+func (ph *ProxyHandler) HandleMessagesSingleChannel(w http.ResponseWriter, r *http.Request) {
+	ph.HandleProxySingleChannel(w, r)
 }
 
 func (ph *ProxyHandler) HandleModelsSingleChannel(w http.ResponseWriter, r *http.Request) {
@@ -74,6 +78,10 @@ func (ph *ProxyHandler) HandleModelsSingleChannel(w http.ResponseWriter, r *http
 }
 
 func (ph *ProxyHandler) HandleMessages(w http.ResponseWriter, r *http.Request) {
+	ph.HandleProxy(w, r)
+}
+
+func (ph *ProxyHandler) HandleProxy(w http.ResponseWriter, r *http.Request) {
 	channelID, err := strconv.ParseInt(r.PathValue("channelID"), 10, 64)
 	if err != nil {
 		http.Error(w, `{"error":{"type":"invalid_request","message":"invalid channel id"}}`, http.StatusBadRequest)
@@ -83,6 +91,12 @@ func (ph *ProxyHandler) HandleMessages(w http.ResponseWriter, r *http.Request) {
 	ch, err := ph.channelRepo.GetByID(channelID)
 	if err != nil {
 		http.Error(w, `{"error":{"type":"not_found","message":"channel not found"}}`, http.StatusNotFound)
+		return
+	}
+	adapter := adapterForChannel(ch)
+	incomingPath := normalizeIncomingPath(r.URL.Path)
+	if !adapter.MatchProxyPath(incomingPath) {
+		http.Error(w, fmt.Sprintf(`{"error":{"type":"not_found","message":"channel protocol %s does not support %s"}}`, adapter.Name(), incomingPath), http.StatusNotFound)
 		return
 	}
 
@@ -102,11 +116,7 @@ func (ph *ProxyHandler) HandleMessages(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	var reqBody struct {
-		Stream bool   `json:"stream"`
-		Model  string `json:"model"`
-	}
-	json.Unmarshal(body, &reqBody)
+	meta := adapter.RequestMeta(r, body)
 
 	// Snapshot the active keys once and rotate over the slice across attempts,
 	// instead of re-querying the DB on every attempt.
@@ -138,20 +148,20 @@ func (ph *ProxyHandler) HandleMessages(w http.ResponseWriter, r *http.Request) {
 			pendingLog := &models.UsageLog{
 				ChannelID: ch.ID,
 				APIKeyID:  key.ID,
-				Model:     reqBody.Model,
-				Endpoint:  "/v1/messages",
+				Model:     meta.Model,
+				Endpoint:  meta.Endpoint,
 				ClientIP:  clientIP,
 				Status:    "pending",
 				CreatedAt: time.Now().UTC(),
 			}
 			if err := ph.usageRepo.CreatePending(pendingLog); err != nil {
-				log.Printf("usage log create pending error: channel=%d key=%d endpoint=/v1/messages err=%v", ch.ID, key.ID, err)
+				log.Printf("usage log create pending error: channel=%d key=%d endpoint=%s err=%v", ch.ID, key.ID, meta.Endpoint, err)
 			} else {
 				usageLogID = pendingLog.ID
 			}
 		}
 
-		if err := ph.sendUpstream(w, r, ch, key, body, reqBody.Stream, reqBody.Model, clientIP, startTime, usageLogID); err != nil {
+		if err := ph.sendUpstream(w, r, ch, adapter, key, body, meta, clientIP, startTime, usageLogID); err != nil {
 			lastErr = err
 			continue
 		}
@@ -170,8 +180,8 @@ func (ph *ProxyHandler) HandleMessages(w http.ResponseWriter, r *http.Request) {
 		if err := ph.usageRepo.UpdateCompleted(usageLogID, &models.UsageLog{
 			ChannelID:    ch.ID,
 			APIKeyID:     apiKeyID,
-			Model:        reqBody.Model,
-			Endpoint:     "/v1/messages",
+			Model:        meta.Model,
+			Endpoint:     meta.Endpoint,
 			ClientIP:     clientIP,
 			Status:       "failed",
 			Success:      false,
@@ -189,31 +199,24 @@ func (ph *ProxyHandler) HandleMessages(w http.ResponseWriter, r *http.Request) {
 // timeout (UpstreamTimeoutSec); stream requests use the client's request context
 // directly so long-lived SSE streams are not cut off (header wait is bounded by
 // the transport's ResponseHeaderTimeout).
-func (ph *ProxyHandler) sendUpstream(w http.ResponseWriter, r *http.Request, ch *models.Channel, key *models.APIKey, body []byte, stream bool, model, clientIP string, startTime time.Time, usageLogID int64) error {
+func (ph *ProxyHandler) sendUpstream(w http.ResponseWriter, r *http.Request, ch *models.Channel, adapter protocolAdapter, key *models.APIKey, body []byte, meta requestMeta, clientIP string, startTime time.Time, usageLogID int64) error {
 	reqCtx := r.Context()
-	if !stream {
+	if !meta.Stream {
 		var cancel context.CancelFunc
 		reqCtx, cancel = context.WithTimeout(r.Context(), time.Duration(ph.cfg.UpstreamTimeoutSec)*time.Second)
 		defer cancel()
 	}
 
-	upstreamURL := strings.TrimRight(ch.BaseURL, "/") + "/v1/messages"
+	path, err := adapter.UpstreamPath(meta)
+	if err != nil {
+		return err
+	}
+	upstreamURL := strings.TrimRight(ch.BaseURL, "/") + path
 	req, err := http.NewRequestWithContext(reqCtx, "POST", upstreamURL, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept-Encoding", "identity")
-	req.Header.Set("x-api-key", key.KeyValue)
-	if v := r.Header.Get("anthropic-version"); v != "" {
-		req.Header.Set("anthropic-version", v)
-	} else {
-		req.Header.Set("anthropic-version", "2023-06-01")
-	}
-	if beta := r.Header.Get("anthropic-beta"); beta != "" {
-		req.Header.Set("anthropic-beta", beta)
-	}
+	adapter.ApplyHeaders(req, r.Header, key.KeyValue)
 
 	resp, err := ph.client.Do(req)
 	if err != nil {
@@ -221,10 +224,10 @@ func (ph *ProxyHandler) sendUpstream(w http.ResponseWriter, r *http.Request, ch 
 		return err
 	}
 
-	if stream {
-		return ph.handleStreamResponse(w, resp, key, ch, model, "/v1/messages", clientIP, startTime, usageLogID)
+	if meta.Stream {
+		return ph.handleStreamResponse(w, resp, adapter, key, ch, meta.Model, meta.Endpoint, clientIP, startTime, usageLogID)
 	}
-	return ph.handleNonStreamResponse(w, resp, key, ch, model, "/v1/messages", clientIP, startTime, usageLogID)
+	return ph.handleNonStreamResponse(w, resp, adapter, key, ch, meta.Model, meta.Endpoint, clientIP, startTime, usageLogID)
 }
 
 func (ph *ProxyHandler) HandleModels(w http.ResponseWriter, r *http.Request) {
@@ -246,15 +249,13 @@ func (ph *ProxyHandler) HandleModels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	upstreamURL := strings.TrimRight(ch.BaseURL, "/") + "/v1/models"
-	req, err := http.NewRequestWithContext(r.Context(), "GET", upstreamURL, nil)
+	adapter := adapterForChannel(ch)
+	req, err := http.NewRequestWithContext(r.Context(), "GET", strings.TrimRight(ch.BaseURL, "/")+adapter.ProbeModelsPath(), nil)
 	if err != nil {
 		http.Error(w, `{"error":{"type":"proxy_error","message":"internal error"}}`, http.StatusInternalServerError)
 		return
 	}
-	req.Header.Set("x-api-key", key.KeyValue)
-	req.Header.Set("Accept-Encoding", "identity")
-	req.Header.Set("anthropic-version", "2023-06-01")
+	adapter.ApplyHeaders(req, r.Header, key.KeyValue)
 
 	resp, err := ph.client.Do(req)
 	if err != nil {
@@ -269,7 +270,7 @@ func (ph *ProxyHandler) HandleModels(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, resp.Body)
 }
 
-func (ph *ProxyHandler) handleStreamResponse(w http.ResponseWriter, resp *http.Response, key *models.APIKey, ch *models.Channel, model, endpoint, clientIP string, startTime time.Time, usageLogID int64) error {
+func (ph *ProxyHandler) handleStreamResponse(w http.ResponseWriter, resp *http.Response, adapter protocolAdapter, key *models.APIKey, ch *models.Channel, model, endpoint, clientIP string, startTime time.Time, usageLogID int64) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -297,8 +298,7 @@ func (ph *ProxyHandler) handleStreamResponse(w http.ResponseWriter, resp *http.R
 
 	flusher, canFlush := w.(http.Flusher)
 
-	var inputTokens, outputTokens, cacheCreate, cacheRead int64
-	var firstTokenMs int64
+	var metrics streamMetrics
 	bodyReader, err := decodedBodyReader(resp)
 	if err != nil {
 		ph.rotator.ReportFailure(key.ID)
@@ -314,22 +314,7 @@ func (ph *ProxyHandler) handleStreamResponse(w http.ResponseWriter, resp *http.R
 		if strings.HasPrefix(line, "data: ") {
 			data := strings.TrimPrefix(line, "data: ")
 			if data != "[DONE]" {
-				var event map[string]json.RawMessage
-				if json.Unmarshal([]byte(data), &event) == nil {
-					if firstTokenMs == 0 && eventHasTextDelta(event) {
-						firstTokenMs = time.Since(startTime).Milliseconds()
-					}
-					if t, ok := event["type"]; ok {
-						var eventType string
-						json.Unmarshal(t, &eventType)
-						switch eventType {
-						case "message_start":
-							extractTokensFromMessageStart(event, &inputTokens, &cacheCreate, &cacheRead)
-						case "message_delta":
-							extractTokensFromMessageDelta(event, &inputTokens, &outputTokens, &cacheCreate, &cacheRead)
-						}
-					}
-				}
+				adapter.ObserveStreamData([]byte(data), &metrics, time.Since(startTime).Milliseconds())
 			}
 		}
 		fmt.Fprintf(w, "%s\n", line)
@@ -343,16 +328,16 @@ func (ph *ProxyHandler) handleStreamResponse(w http.ResponseWriter, resp *http.R
 	}
 
 	latency := time.Since(startTime).Milliseconds()
-	if firstTokenMs == 0 {
-		firstTokenMs = latency
+	if metrics.FirstTokenMs == 0 {
+		metrics.FirstTokenMs = latency
 	}
-	outputSpeed := outputTokensPerSec(outputTokens, latency-firstTokenMs)
-	ph.updateUsage(usageLogID, key, ch, model, endpoint, inputTokens, outputTokens, cacheCreate, cacheRead,
-		true, resp.StatusCode, latency, firstTokenMs, outputSpeed, "", clientIP)
+	outputSpeed := outputTokensPerSec(metrics.Usage.OutputTokens, latency-metrics.FirstTokenMs)
+	ph.updateUsage(usageLogID, key, ch, model, endpoint, metrics.Usage.InputTokens, metrics.Usage.OutputTokens, metrics.Usage.CacheCreationTokens, metrics.Usage.CacheReadTokens,
+		true, resp.StatusCode, latency, metrics.FirstTokenMs, outputSpeed, "", clientIP)
 	return nil
 }
 
-func (ph *ProxyHandler) handleNonStreamResponse(w http.ResponseWriter, resp *http.Response, key *models.APIKey, ch *models.Channel, model, endpoint, clientIP string, startTime time.Time, usageLogID int64) error {
+func (ph *ProxyHandler) handleNonStreamResponse(w http.ResponseWriter, resp *http.Response, adapter protocolAdapter, key *models.APIKey, ch *models.Channel, model, endpoint, clientIP string, startTime time.Time, usageLogID int64) error {
 	body, err := readDecodedBody(resp)
 	resp.Body.Close()
 	if err != nil {
@@ -376,7 +361,7 @@ func (ph *ProxyHandler) handleNonStreamResponse(w http.ResponseWriter, resp *htt
 
 	ph.rotator.ReportSuccess(key.ID)
 
-	usage := extractUsageFromBody(body)
+	usage := adapter.ParseNonStreamUsage(body)
 
 	latency := time.Since(startTime).Milliseconds()
 	outputSpeed := outputTokensPerSec(usage.OutputTokens, latency)
@@ -446,7 +431,7 @@ func outputTokensPerSec(outputTokens, durationMs int64) float64 {
 	return float64(outputTokens) / (float64(durationMs) / 1000)
 }
 
-func eventHasTextDelta(event map[string]json.RawMessage) bool {
+func anthropicEventHasTextDelta(event map[string]json.RawMessage) bool {
 	if delta, ok := event["delta"]; ok {
 		var d struct {
 			Text string `json:"text"`
@@ -509,17 +494,7 @@ func decodedBodyReader(resp *http.Response) (io.Reader, error) {
 	}
 }
 
-func extractUsageFromBody(body []byte) parsedUsage {
-	var envelope struct {
-		Usage json.RawMessage `json:"usage"`
-	}
-	if json.Unmarshal(body, &envelope) != nil || len(envelope.Usage) == 0 {
-		return parsedUsage{}
-	}
-	return parseUsage(envelope.Usage)
-}
-
-func parseUsage(raw json.RawMessage) parsedUsage {
+func anthropicUsageParser(raw json.RawMessage) parsedUsage {
 	var u anthropicUsage
 	if json.Unmarshal(raw, &u) != nil {
 		return parsedUsage{}
@@ -564,7 +539,7 @@ func extractTokensFromMessageStart(event map[string]json.RawMessage, input, cach
 			Usage json.RawMessage `json:"usage"`
 		}
 		if json.Unmarshal(msg, &m) == nil && len(m.Usage) > 0 {
-			usage := parseUsage(m.Usage)
+			usage := anthropicUsageParser(m.Usage)
 			if usage.InputTokens != 0 {
 				*input = usage.InputTokens
 			}
@@ -578,18 +553,8 @@ func extractTokensFromMessageStart(event map[string]json.RawMessage, input, cach
 	}
 }
 
-func extractTokensFromMessageDelta(event map[string]json.RawMessage, input, output, cacheCreate, cacheRead *int64) {
+func extractTokensFromMessageDelta(event map[string]json.RawMessage, parsed *parsedUsage) {
 	if usage, ok := event["usage"]; ok {
-		parsed := parsedUsage{
-			InputTokens:         *input,
-			OutputTokens:        *output,
-			CacheCreationTokens: *cacheCreate,
-			CacheReadTokens:     *cacheRead,
-		}
-		mergeUsage(&parsed, parseUsage(usage))
-		*input = parsed.InputTokens
-		*output = parsed.OutputTokens
-		*cacheCreate = parsed.CacheCreationTokens
-		*cacheRead = parsed.CacheReadTokens
+		mergeUsage(parsed, anthropicUsageParser(usage))
 	}
 }

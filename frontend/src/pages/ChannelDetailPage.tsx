@@ -20,6 +20,22 @@ import {
   Spinner,
 } from "@heroui/react";
 
+const PROTOCOL_OPTIONS = [
+  { key: "anthropic_messages", label: "Anthropic Messages", endpoint: "/v1/messages" },
+  { key: "openai_chat_completions", label: "OpenAI Chat Completions", endpoint: "/v1/chat/completions" },
+  { key: "openai_responses", label: "OpenAI Responses", endpoint: "/v1/responses" },
+  { key: "gemini_generate_content", label: "Gemini Generate Content", endpoint: "/v1beta/models/{model}:generateContent" },
+];
+
+function protocolLabel(protocol: string) {
+  return PROTOCOL_OPTIONS.find((item) => item.key === protocol)?.label || protocol || "Anthropic Messages";
+}
+
+function proxyEndpoint(channel: Channel) {
+  const endpoint = PROTOCOL_OPTIONS.find((item) => item.key === channel.protocol)?.endpoint || "/v1/messages";
+  return `/channel/${channel.id}${endpoint}`;
+}
+
 interface ChannelPerformancePoint {
   time: string;
   first_token_ms: number;
@@ -42,6 +58,7 @@ export function ChannelDetailPage() {
   const [batchProbing, setBatchProbing] = useState(false);
   const [showBatchProbeConfirm, setShowBatchProbeConfirm] = useState(false);
   const [probeModel, setProbeModel] = useState("");
+  const [protocol, setProtocol] = useState("anthropic_messages");
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [modelLoading, setModelLoading] = useState(false);
   const [modelMsg, setModelMsg] = useState("");
@@ -55,8 +72,11 @@ export function ChannelDetailPage() {
   };
   useEffect(() => { load(); }, [channelId]);
   useEffect(() => {
-    if (channel) setProbeModel(channel.probe_model || "");
-  }, [channel?.id, channel?.probe_model]);
+    if (channel) {
+      setProbeModel(channel.probe_model || "");
+      setProtocol(channel.protocol || "anthropic_messages");
+    }
+  }, [channel?.id, channel?.probe_model, channel?.protocol]);
 
   const activeKeys = keys.filter((k) => k.is_active).length;
 
@@ -149,9 +169,9 @@ export function ChannelDetailPage() {
     if (!channel) return;
     setModelMsg("");
     try {
-      const updated = await updateChannel(channel.id, { probe_model: probeModel.trim() });
+      const updated = await updateChannel(channel.id, { probe_model: probeModel.trim(), protocol });
       setChannel(updated);
-      setModelMsg("探测模型已保存");
+      setModelMsg("协议和探测模型已保存");
     } catch {
       setModelMsg("保存探测模型失败");
     } finally {
@@ -216,13 +236,14 @@ export function ChannelDetailPage() {
       <div>
         <h1 className="text-xl md:text-2xl font-bold">{channel.name}</h1>
         <p className="text-xs md:text-sm text-default-500 mt-1 break-all">{channel.base_url}</p>
+        <p className="text-xs text-default-500 mt-1">{protocolLabel(channel.protocol)}</p>
         {channel.description && <p className="text-sm text-default-500">{channel.description}</p>}
       </div>
       <Card>
         <CardBody className="p-5 space-y-2">
           <h2 className="text-sm font-medium">调用提示</h2>
           <div className="text-xs text-default-500 space-y-1">
-            <p className="break-all">外部调用此渠道：<span className="font-mono text-foreground">/channel/{channel.id}/v1/messages</span></p>
+            <p className="break-all">外部调用此渠道：<span className="font-mono text-foreground">{proxyEndpoint(channel)}</span></p>
             <p className="break-all">请求必须携带管理员令牌：<span className="font-mono text-foreground">Authorization: Bearer &lt;adminToken&gt;</span> 或 <span className="font-mono text-foreground">x-api-key: &lt;adminToken&gt;</span>。</p>
             <p>探测会消耗上游少量请求，但只记录到探测历史，不计入用量统计。</p>
           </div>
@@ -231,10 +252,23 @@ export function ChannelDetailPage() {
       <Card>
         <CardBody className="p-5 space-y-3">
           <div>
-            <h2 className="text-sm font-medium">探测模型</h2>
-            <p className="text-xs text-default-500 mt-1">用于手动探测和自动恢复探测。端点不支持模型列表时，可以直接手填模型 ID；探测结果不会进入用量页。</p>
+            <h2 className="text-sm font-medium">协议与探测模型</h2>
+            <p className="text-xs text-default-500 mt-1">用于业务代理、手动探测和自动恢复探测。端点不支持模型列表时，可以直接手填模型 ID；探测结果不会进入用量页。</p>
           </div>
           <div className="flex flex-col sm:flex-row flex-wrap gap-3">
+            <Select
+              label="上游协议"
+              selectedKeys={new Set([protocol])}
+              onSelectionChange={(keys) => {
+                const key = Array.from(keys)[0] as string;
+                if (key) setProtocol(key);
+              }}
+              className="sm:min-w-72"
+            >
+              {PROTOCOL_OPTIONS.map((item) => (
+                <SelectItem key={item.key}>{item.label}</SelectItem>
+              ))}
+            </Select>
             {modelOptions.length > 0 && (
               <Select
                 label="模型列表"

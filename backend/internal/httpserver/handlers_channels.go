@@ -60,8 +60,16 @@ func (h *Handlers) CreateChannel(w http.ResponseWriter, r *http.Request) {
 	}
 	ch.Name = strings.TrimSpace(ch.Name)
 	ch.BaseURL = strings.TrimSpace(ch.BaseURL)
+	ch.Protocol = strings.TrimSpace(ch.Protocol)
 	ch.ProbeModel = strings.TrimSpace(ch.ProbeModel)
 	ch.IsActive = true
+	if ch.Protocol == "" {
+		ch.Protocol = models.ProtocolAnthropicMessages
+	}
+	if !validChannelProtocol(ch.Protocol) {
+		writeError(w, 400, "invalid protocol")
+		return
+	}
 	if ch.Name == "" || ch.BaseURL == "" {
 		writeError(w, 400, "name and base_url are required")
 		return
@@ -101,6 +109,7 @@ func (h *Handlers) UpdateChannel(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Name        *string `json:"name"`
 		BaseURL     *string `json:"base_url"`
+		Protocol    *string `json:"protocol"`
 		Description *string `json:"description"`
 		ProbeModel  *string `json:"probe_model"`
 		IsActive    *bool   `json:"is_active"`
@@ -114,6 +123,16 @@ func (h *Handlers) UpdateChannel(w http.ResponseWriter, r *http.Request) {
 	}
 	if input.BaseURL != nil {
 		ch.BaseURL = strings.TrimSpace(*input.BaseURL)
+	}
+	if input.Protocol != nil {
+		ch.Protocol = strings.TrimSpace(*input.Protocol)
+		if ch.Protocol == "" {
+			ch.Protocol = models.ProtocolAnthropicMessages
+		}
+		if !validChannelProtocol(ch.Protocol) {
+			writeError(w, 400, "invalid protocol")
+			return
+		}
 	}
 	if input.Description != nil {
 		ch.Description = *input.Description
@@ -142,4 +161,16 @@ func (h *Handlers) DeleteChannel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]string{"status": "deleted"})
+}
+
+func validChannelProtocol(protocol string) bool {
+	switch protocol {
+	case models.ProtocolAnthropicMessages,
+		models.ProtocolOpenAIChatCompletions,
+		models.ProtocolOpenAIResponses,
+		models.ProtocolGeminiGenerateContent:
+		return true
+	default:
+		return false
+	}
 }

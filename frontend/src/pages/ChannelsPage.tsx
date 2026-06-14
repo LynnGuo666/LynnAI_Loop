@@ -13,7 +13,20 @@ import {
   ModalFooter,
   Input,
   Link,
+  Select,
+  SelectItem,
 } from "@heroui/react";
+
+const PROTOCOL_OPTIONS = [
+  { key: "anthropic_messages", label: "Anthropic Messages" },
+  { key: "openai_chat_completions", label: "OpenAI Chat Completions" },
+  { key: "openai_responses", label: "OpenAI Responses" },
+  { key: "gemini_generate_content", label: "Gemini Generate Content" },
+];
+
+function protocolLabel(protocol: string) {
+  return PROTOCOL_OPTIONS.find((item) => item.key === protocol)?.label || protocol || "Anthropic Messages";
+}
 
 export function ChannelsPage() {
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -58,6 +71,7 @@ export function ChannelsPage() {
       ),
     },
     { key: "base_url", label: "基础地址" },
+    { key: "protocol", label: "协议", render: (ch: Channel) => protocolLabel(ch.protocol) },
     { key: "probe_model", label: "探测模型", render: (ch: Channel) => ch.probe_model || "未设置" },
     { key: "description", label: "描述" },
     {
@@ -105,6 +119,7 @@ export function ChannelsPage() {
 function CreateChannelModal({ isOpen, onClose, onCreate }: { isOpen: boolean; onClose: () => void; onCreate: (d: Partial<Channel>) => void }) {
   const [name, setName] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
+  const [protocol, setProtocol] = useState("anthropic_messages");
   const [desc, setDesc] = useState("");
   const [probeModel, setProbeModel] = useState("");
 
@@ -115,6 +130,18 @@ function CreateChannelModal({ isOpen, onClose, onCreate }: { isOpen: boolean; on
         <ModalBody className="gap-4">
           <Input label="渠道名称" value={name} onValueChange={setName} />
           <Input label="基础地址" placeholder="https://api.anthropic.com" value={baseUrl} onValueChange={setBaseUrl} />
+          <Select
+            label="上游协议"
+            selectedKeys={new Set([protocol])}
+            onSelectionChange={(keys) => {
+              const key = Array.from(keys)[0] as string;
+              if (key) setProtocol(key);
+            }}
+          >
+            {PROTOCOL_OPTIONS.map((item) => (
+              <SelectItem key={item.key}>{item.label}</SelectItem>
+            ))}
+          </Select>
           <Input label="探测模型 ID" placeholder="claude-3-5-haiku-latest（可选）" value={probeModel} onValueChange={setProbeModel} />
           <Input label="描述" placeholder="可选" value={desc} onValueChange={setDesc} />
         </ModalBody>
@@ -122,7 +149,7 @@ function CreateChannelModal({ isOpen, onClose, onCreate }: { isOpen: boolean; on
           <Button variant="flat" onPress={onClose}>取消</Button>
           <Button
             color="primary"
-            onPress={() => onCreate({ name, base_url: baseUrl, description: desc, probe_model: probeModel.trim() })}
+            onPress={() => onCreate({ name, base_url: baseUrl, protocol, description: desc, probe_model: probeModel.trim() })}
             isDisabled={!name || !baseUrl}
           >
             创建

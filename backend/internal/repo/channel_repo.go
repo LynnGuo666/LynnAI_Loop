@@ -16,9 +16,12 @@ func NewChannelRepo(db *db.DB) *ChannelRepo {
 
 func (r *ChannelRepo) Create(ch *models.Channel) error {
 	now := time.Now()
+	if ch.Protocol == "" {
+		ch.Protocol = models.ProtocolAnthropicMessages
+	}
 	result, err := r.db.Exec(
-		`INSERT INTO channels (name, base_url, description, probe_model, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		ch.Name, ch.BaseURL, ch.Description, ch.ProbeModel, boolToInt(ch.IsActive), fmtTime(now), fmtTime(now),
+		`INSERT INTO channels (name, base_url, protocol, description, probe_model, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		ch.Name, ch.BaseURL, ch.Protocol, ch.Description, ch.ProbeModel, boolToInt(ch.IsActive), fmtTime(now), fmtTime(now),
 	)
 	if err != nil {
 		return err
@@ -33,17 +36,20 @@ func (r *ChannelRepo) GetByID(id int64) (*models.Channel, error) {
 	ch := &models.Channel{}
 	var isActive int
 	err := r.db.QueryRow(
-		`SELECT id, name, base_url, description, probe_model, is_active, created_at, updated_at FROM channels WHERE id = ?`, id,
-	).Scan(&ch.ID, &ch.Name, &ch.BaseURL, &ch.Description, &ch.ProbeModel, &isActive, &ch.CreatedAt, &ch.UpdatedAt)
+		`SELECT id, name, base_url, protocol, description, probe_model, is_active, created_at, updated_at FROM channels WHERE id = ?`, id,
+	).Scan(&ch.ID, &ch.Name, &ch.BaseURL, &ch.Protocol, &ch.Description, &ch.ProbeModel, &isActive, &ch.CreatedAt, &ch.UpdatedAt)
 	if err != nil {
 		return nil, err
+	}
+	if ch.Protocol == "" {
+		ch.Protocol = models.ProtocolAnthropicMessages
 	}
 	ch.IsActive = isActive == 1
 	return ch, nil
 }
 
 func (r *ChannelRepo) List() ([]models.Channel, error) {
-	rows, err := r.db.Query(`SELECT id, name, base_url, description, probe_model, is_active, created_at, updated_at FROM channels ORDER BY id`)
+	rows, err := r.db.Query(`SELECT id, name, base_url, protocol, description, probe_model, is_active, created_at, updated_at FROM channels ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -53,8 +59,11 @@ func (r *ChannelRepo) List() ([]models.Channel, error) {
 	for rows.Next() {
 		var ch models.Channel
 		var isActive int
-		if err := rows.Scan(&ch.ID, &ch.Name, &ch.BaseURL, &ch.Description, &ch.ProbeModel, &isActive, &ch.CreatedAt, &ch.UpdatedAt); err != nil {
+		if err := rows.Scan(&ch.ID, &ch.Name, &ch.BaseURL, &ch.Protocol, &ch.Description, &ch.ProbeModel, &isActive, &ch.CreatedAt, &ch.UpdatedAt); err != nil {
 			return nil, err
+		}
+		if ch.Protocol == "" {
+			ch.Protocol = models.ProtocolAnthropicMessages
 		}
 		ch.IsActive = isActive == 1
 		channels = append(channels, ch)
@@ -63,9 +72,12 @@ func (r *ChannelRepo) List() ([]models.Channel, error) {
 }
 
 func (r *ChannelRepo) Update(ch *models.Channel) error {
+	if ch.Protocol == "" {
+		ch.Protocol = models.ProtocolAnthropicMessages
+	}
 	_, err := r.db.Exec(
-		`UPDATE channels SET name=?, base_url=?, description=?, probe_model=?, is_active=?, updated_at=? WHERE id=?`,
-		ch.Name, ch.BaseURL, ch.Description, ch.ProbeModel, boolToInt(ch.IsActive), fmtTime(time.Now()), ch.ID,
+		`UPDATE channels SET name=?, base_url=?, protocol=?, description=?, probe_model=?, is_active=?, updated_at=? WHERE id=?`,
+		ch.Name, ch.BaseURL, ch.Protocol, ch.Description, ch.ProbeModel, boolToInt(ch.IsActive), fmtTime(time.Now()), ch.ID,
 	)
 	return err
 }
